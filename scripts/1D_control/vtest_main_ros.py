@@ -1,10 +1,11 @@
 #!/usr/bin/env python
 
 import rospy
+from geometry_msgs.msg import PoseStamped, TwistStamped
+from std_msgs.msg import Bool
 
 
 import do_mpc
-from VTest_MPC import VTest_mpc
 from vtest_model_ros import VTest_model
 from VTest_MPC import VTest_mpc
 from VTest_Simulator import VTest_simulator
@@ -12,110 +13,62 @@ import numpy as np
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
-# Constants
-N = 100
+class vtest_main():
+    def __init__(self):
+        # Subscriber
+        self.pose_sub = rospy.Subscriber('/lltv_pose', PoseStamped, self.pose_cb)
+        self.vel_sub = rospy.Subscribeer('/lltv_vel', TwistStamped, self.twist_cb)
 
-model = VTest_model()
-mpc = VTest_mpc(model)
-simulator = VTest_simulator(model)
+        #Publisher
+        self.thrusterUp = rospy.Publisher('thruster_up', Bool, queue_size=1)
+        self.thrusterDown = rospy.Publisher('thruster_down', Bool, queue_size=1)
 
-# Set the initial state of simulator
-x0 = np.array([0, 0, 17.0])
-simulator.x0 = x0
-mpc.x0 = x0
+        self.model = VTest_model()
+        self.mpc = VTest_mpc(self.model)
+        self.simulator = VTest_simulator(self.model)
 
-mpc.set_initial_guess()
+        # Set the initial state for simulator
+        self.x0 = np.array([0,0,17.0])
+        self.simulator.x0 = self.x0
+        self.mpc.x0 = self.x0
 
-# Customizing Matplotlib
-mpl.rcParams['font.size'] = 18
-mpl.rcParams['lines.linewidth'] = 3
-mpl.rcParams['axes.grid'] = True
+        self.total_pulse_time = 0
+        self.fuel_rate = 0.018  #0.018 g/s
 
-# Setup graphics
-mpc_graphics = do_mpc.graphics.Graphics(mpc.data)
-sim_graphics = do_mpc.graphics.Graphics(simulator.data)
+        # Parameters for bang-bang
+        self.kappa = 0.1
+        self.ud_last = np.array([[0],[0]])
+        self.ud = np.array([[0],[0]])
 
-fig, ax = plt.subplots(5, sharex=True, figsize=(16,10))
-fig.align_ylabels()
-plt.ion()
+        #self.mpc.set_initial_guess()
+        def pose_cb(self, pose):
+            self.x0[0] = pose.pose.position.z
 
-for g in [sim_graphics, mpc_graphics]:
-    # Plot r1, r2 and m on the first axis
-    g.add_line(var_type='_x', var_name='r_1', axis=ax[0])
-    g.add_line(var_type='_x', var_name='r_2', axis=ax[0])
-    g.add_line(var_type='_tvp', var_name='position_setpoint', axis=ax[0], linestyle='--')
-    g.add_line(var_type='_x', var_name='m', axis=ax[1])
+        def twist_cb(self, twist):
+            self.x0[1] = twist.twist.linear.z
 
-    # Plot control inputs
-    g.add_line(var_type='_u', var_name='Td', axis=ax[2])
-    g.add_line(var_type='_u', var_name='Tu', axis=ax[2])
+if __name__ == '__main__':
 
-ax[0].set_title('Simulation Result')
-ax[0].set_ylabel('meter')
-ax[0].legend(mpc_graphics.result_lines['_x','r_1']
-     + mpc_graphics.result_lines['_x','r_2']+ mpc_graphics.result_lines['_tvp','position_setpoint']
-     , ['position', 'velocity','position_setpoint'], fontsize=10)
-ax[0].set_ylim([-1,1.5])
-ax[0].set_xlim([0,31])
+    rospy.init_node('vtest_main_node', anonymous=False)
+    rate = rospy.Rate(10)
+    n = vtest_main()
 
-ax[1].set_title('Total Mass', fontsize =12)
-ax[1].set_ylabel('kg')
-ax[1].legend(mpc_graphics.result_lines['_x','m'],['total mass'], fontsize=10)
-ax[1].set_ylim([16.5,17.1])
-ax[1].set_xlim([0,31])
-
-ax[2].set_title('control_signal', fontsize =12)
-#ax[2].set_xlabel('time [s]')
-ax[2].legend(mpc_graphics.result_lines['_u','Td'] 
-    + mpc_graphics.result_lines['_u','Tu'],['Thrust Down','Thrust Up'], fontsize=10)
-ax[2].set_ylim([0,1])
-ax[2].set_xlim([0,31])
-
-
-_x = model.x
-# Running Simulator
-#while mpc._x['m'] >= 6.5: #(model.m_2 + model.m_1s):
-
-# some parameters for bang-bang
-kappa = 0.1
-ud_last = np.array([[0],[0]])
-ud = np.zeros((2,N))
-
-for k in range(N):
-#u0 = mpc.make_step(x0)
-#while mpc.data['_x','m',0] >= 6.5:
-    u0 = mpc.make_step(x0)
-    for cmd in range(2):
-        if ud_last[cmd,0] == 1:
-            if u0[cmd,0] >= (1-kappa)*1/2:
-                ud[cmd,k] = 1
+    while not rospy.is_shutdown():
+        u0 = n.mpc.make_step(n.x0)
+        for cmd in range(2):
+            if n.ud_last[cmd,0] == 1:
+                if u0[cmd,0] >= (1-n.kappa)*1/2:
+                    n.ud[cmd,0] = 1
+                else:
+                    n.ud[cmd,0] = 0
+            elif n.ud_last[cmd,0] == 0:
+                if u0[cmd,0] >= (1+n.kappa)*1/2:
+                    n.ud[cmd,0] = 1
+                else:
+                    n.ud[cmd,0] = 0
             else:
-                ud[cmd,k] = 0
-        elif ud_last[cmd,0] == 0:
-            if u0[cmd,0] >= (1+kappa)*1/2:
-                ud[cmd,k] = 1
-            else:
-                ud[cmd,k] = 0
-        else:
-            print('ERROR')
-            quit()
-        
-    ud_last = ud[0:2,k:k+1]
-    
-    x0 = simulator.make_step(ud[0:2,k:k+1])
-    #u0 = mpc.make_step(x0)
+                print('ERROR')
+                quit()
+        n.ud_last[0:2,0] = n.ud[0:2,0]
 
-    ax[3].set_title('outputDown', fontsize=10)
-    ax[3].plot(mpc.data['_time'],ud[0:1,0:k+1].transpose(),drawstyle='steps-post',color='orange')
-    ax[4].set_title('outputUp', fontsize=10)
-    ax[4].set_xlabel('time [s]')
-    ax[4].plot(mpc.data['_time'],ud[1:2,0:k+1].transpose(),drawstyle='steps-post',color='blue')
 
-    mpc_graphics.plot_results()
-    #sim_graphics.plot_results()
-    #mpc_graphics.reset_axes()
-    #sim_graphics.reset_axes()
-    plt.show()
-    plt.pause(0.01)
-
-input('Press ENTER to exit.')
