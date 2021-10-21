@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 2.8.3)
 project(srpl-micro-lltv)
 
 ## Compile as C++11, supported in ROS Kinetic and newer
-# add_compile_options(-std=c++11)
+add_compile_options(-std=c++11)
 
 ## Find catkin macros and libraries
 ## if COMPONENTS list like find_package(catkin REQUIRED COMPONENTS xyz)
@@ -14,9 +14,9 @@ find_package(catkin REQUIRED COMPONENTS
   tf
 )
 
+
 ## System dependencies are found with CMake's conventions
 # find_package(Boost REQUIRED COMPONENTS system)
-
 
 ## Uncomment this if the package has a setup.py. This macro ensures
 ## modules and global scripts declared therein get installed
@@ -116,9 +116,26 @@ catkin_package(
 
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
+set(PSOPT_INCLUDE_DIR /usr/local/include/PSOPT)
+#set(PSOPT_INCLUDE_DIR ${PSOPT_PREFIX_DIR}/include ${PSOPT_PREFIX_DIR}/src)
+
+
+SET( EIGEN3_INCLUDE_DIR /usr/local/include/eigen-3.3.9 )
+IF( NOT EIGEN3_INCLUDE_DIR )
+    MESSAGE( FATAL_ERROR "Please point the environment variable EIGEN3_INCLUDE_DIR to the include directory of your Eigen3 installation.")
+ENDIF()
+
+SET( IPOPT_INCLUDE_DIR /usr/local/include/coin-or)
+SET( ADOLC_INCLUDE_DIR /usr/local/include/adol-c)
+
 include_directories(
-# include
+  #include
   ${catkin_INCLUDE_DIRS}
+  ${PSOPT_INCLUDE_DIR}
+  ${EIGEN3_INCLUDE_DIR}
+  ${IPOPT_INCLUDE_DIR}  
+  ${ADOLC_INCLUDE_DIR}
+  
 )
 
 ## Declare a C++ library
@@ -135,6 +152,7 @@ include_directories(
 ## With catkin_make all packages are built within a single CMake context
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/srpl-micro-lltv_node.cpp)
+add_executable(one_dim_ocp src/one_dim_ocp.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -145,11 +163,21 @@ include_directories(
 ## Add cmake target dependencies of the executable
 ## same as for the library above
 # add_dependencies(${PROJECT_NAME}_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
+#add_dependencies(one_dim_ocp )
 
 ## Specify libraries to link a library or executable target against
 # target_link_libraries(${PROJECT_NAME}_node
 #   ${catkin_LIBRARIES}
 # )
+set(IPOPT_LIBRARIES_DIR /usr/local/lib/libipopt.so)
+set(ADOLC_LIBRARIES_DIR /usr/local/lib64/libadolc.so)
+set(PSOPT_LIBRARIES_DIR /usr/local/lib/PSOPT/libPSOPT.a)
+target_link_libraries( one_dim_ocp
+   ${catkin_LIBRARIES} 
+   ${ADOLC_LIBRARIES_DIR}
+   ${PSOPT_LIBRARIES_DIR}
+   ${IPOPT_LIBRARIES_DIR}
+ )
 
 #############
 ## Install ##
