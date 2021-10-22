@@ -126,7 +126,7 @@ IF( NOT EIGEN3_INCLUDE_DIR )
 ENDIF()
 
 SET( IPOPT_INCLUDE_DIR /usr/local/include/coin-or)
-SET( ADOLC_INCLUDE_DIR /usr/local/include/adol-c)
+SET( ADOLC_INCLUDE_DIR /usr/local/include/adolc)
 
 include_directories(
   #include

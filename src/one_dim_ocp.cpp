@@ -46,10 +46,10 @@ adouble integrand_cost(adouble* states, adouble* controls, adouble* parameters,
                      adouble& time, adouble* xad, int iphase, Workspace* workspace)
 {
     // TODO: Add control square cost
-    //adouble input = controls[0];
+    adouble input = controls[0];
 
-    //return 0.5*input*input;
-    return 0;
+    return input*input;
+    //return 0;
 }
 
 /////// Define system dynamics ///////
@@ -160,7 +160,7 @@ int main(int argc, char **argv)
 
     // Rigister problem name
     problem.name = "1-D OCP";
-    problem.outfilename = '1d.txt';
+    problem.outfilename = "1d.txt";
 
     //define problem level constants & do level 1 setup
     problem.nphases = 1;
@@ -227,10 +227,10 @@ int main(int argc, char **argv)
             exit(0);
         }
 
-        MatrixXd rk4_control(2,1);
-        rk4_control(0,0) = last_control; rk4_control(1,0) = last_control;
-        MatrixXd rk4_time(2,1);
-        rk4_time(0,0) = position_stamped; rk4_time(1,0) = curr_Time;
+        MatrixXd rk4_control(1,2);
+        rk4_control(0,0) = last_control; rk4_control(0,1) = last_control;
+        MatrixXd rk4_time(1,2);
+        rk4_time(0,0) = position_stamped; rk4_time(0,1) = curr_Time;
         MatrixXd rk4_state(3,2);
         MatrixXd rk4_param;
         MatrixXd init_states(3,1);
@@ -251,19 +251,19 @@ int main(int argc, char **argv)
 
         MatrixXd x0(3,nnodes);
         MatrixXd init_state_guess(3,1);
-        init_state_guess(0,0) = rk4_state(0,0);
-        init_state_guess(1,0) = rk4_state(1,0);
-        init_state_guess(2,0) = rk4_state(2,0);
+        init_state_guess(0,0) = rk4_state(0,1);
+        init_state_guess(1,0) = rk4_state(1,1);
+        init_state_guess(2,0) = rk4_state(2,1);
 
         MatrixXd& init_state_guess_ref = init_state_guess;
 
-        problem.phases(1).guess.controls       = zeros(last_control,nnodes);
+        problem.phases(1).guess.controls       = last_control*ones(1,nnodes);
         problem.phases(1).guess.time           = linspace(curr_Time, curr_Time+0.5, nnodes);
         rk4_propagate(&dae, problem.phases(1).guess.controls, problem.phases(1).guess.time,
                         init_state_guess_ref, rk4_param, problem, 1, x0, NULL);
         problem.phases(1).guess.states         = x0;
         // problem bounds information
-        problem.phases(1).bounds.lower.states << 0, 0, 0;
+        problem.phases(1).bounds.lower.states << 0, -2, 0;
         problem.phases(1).bounds.upper.states << 3, 2, MF_INIT;
 
         problem.phases(1).bounds.lower.controls << -1.0;
@@ -275,8 +275,8 @@ int main(int argc, char **argv)
         problem.phases(1).bounds.lower.StartTime = position_stamped; 
         problem.phases(1).bounds.upper.StartTime = position_stamped;
 
-        problem.phases(1).bounds.lower.EndTime = position_stamped+0.5;
-        problem.phases(1).bounds.upper.EndTime = position_stamped+0.5;
+        problem.phases(1).bounds.lower.EndTime = position_stamped+2.5;
+        problem.phases(1).bounds.upper.EndTime = position_stamped+2.5;
 
         ////////// Call PSOPT to solve the problem //////////
         psopt(solution, problem, algorithm);
@@ -287,7 +287,33 @@ int main(int argc, char **argv)
         MatrixXd t_sol = solution.get_time_in_phase(1);
         // interpolate control at current time
         adouble control_now;
-        spline_interpolation(&control_now, curr_Time_ref, t_sol, uStar, nnodes);
+        //spline_interpolation(&control_now, curr_Time_ref, t_sol, uStar, nnodes);
+
+        control_now = uStar(0);
+        printf("control now value %f \n", control_now.value());
+
+        // make a schidmit trigger to transform continuous command to on-off command
+        float kappa = 0.1;
+
+       if (last_control == 1)
+       {
+           if(control_now.value() >= (1-kappa)*0.5) control_now.setValue(1);
+           else if(control_now.value() <= (1+kappa)*-0.5) control_now.setValue(-1);
+           else control_now.setValue(0);
+       }
+       else if (last_control == 0)
+       {
+           if(control_now.value() >= (1+kappa)*0.5) control_now.setValue(1);
+           else if(control_now.value() <= (1+kappa)*-0.5) control_now.setValue(-1);
+           else control_now.setValue(0);
+       }
+       else if (last_control == -1)
+       {
+           if(control_now.value() >= (1+kappa)*0.5) control_now.setValue(1);
+           else if(control_now.value() <= (1-kappa)*-0.5) control_now.setValue(-1);
+           else control_now.setValue(0);
+       }
+       else{ printf("last control error!"); exit(0);}
 
         control.data = control_now.value();
         control_pub.publish(control);
