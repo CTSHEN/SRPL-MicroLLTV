@@ -9,7 +9,7 @@
 #include <geometry_msgs/TwistStamped.h>
 #include <std_msgs/Float32.h>
 
-#define M2 9 // kg
+#define M2 8 // kg
 #define M1S 8.5 //kg
 #define MF_INIT 0.5 //kg
 #define G 9.81 // m/s2
@@ -35,7 +35,7 @@ adouble endpoint_cost(adouble* initial_states, adouble* final_states,
     adouble xf_error = final_states[0] - DIS_X;
     adouble vf_error = final_states[1] = DIS_V;
 
-    return 0.5*(xf_error*xf_error + vf_error*vf_error);
+    return (xf_error*xf_error + vf_error*vf_error);
 
 
 }
@@ -48,7 +48,7 @@ adouble integrand_cost(adouble* states, adouble* controls, adouble* parameters,
     // TODO: Add control square cost
     adouble input = controls[0];
 
-    return input*input;
+    return 0.5*input*input;
     //return 0;
 }
 
@@ -106,7 +106,8 @@ double velocity = 0.0;
 double velocity_stamped;
 double FmassEst = 0.5;
 
-std_msgs::Float32 control;
+std_msgs::Float32 control; // on-off control command
+std_msgs::Float32 cont_control; //continuous control command
 
 void poseCb(const geometry_msgs::PoseStamped::ConstPtr& msg)
 {
@@ -145,9 +146,14 @@ int main(int argc, char **argv)
     ros::Subscriber mass_sub = nh.subscribe<std_msgs::Float32>
         ("mass_est",1 , massCb);
 
-    //Publish control
+    //Publish control (on-off)
     ros::Publisher control_pub = nh.advertise<std_msgs::Float32>
         ("control", 1);
+
+    // Publish the continuous control
+    ros::Publisher cont_control_pub = nh.advertise<std_msgs::Float32>
+        ("cont_control",1);
+
 
     // set the control publish rate at 5Hz.
     ros::Rate rate(5);
@@ -258,7 +264,7 @@ int main(int argc, char **argv)
         MatrixXd& init_state_guess_ref = init_state_guess;
 
         problem.phases(1).guess.controls       = last_control*ones(1,nnodes);
-        problem.phases(1).guess.time           = linspace(curr_Time, curr_Time+0.5, nnodes);
+        problem.phases(1).guess.time           = linspace(curr_Time, curr_Time+2.5, nnodes);
         rk4_propagate(&dae, problem.phases(1).guess.controls, problem.phases(1).guess.time,
                         init_state_guess_ref, rk4_param, problem, 1, x0, NULL);
         problem.phases(1).guess.states         = x0;
@@ -292,8 +298,12 @@ int main(int argc, char **argv)
         control_now = uStar(0);
         printf("control now value %f \n", control_now.value());
 
+        // publish the continuous control data
+        cont_control.data = control_now.value();
+        cont_control_pub.publish(cont_control);
+
         // make a schidmit trigger to transform continuous command to on-off command
-        float kappa = 0.1;
+        float kappa = 0.2;
 
        if (last_control == 1)
        {
