@@ -17,13 +17,118 @@
 #define THRUST 15 // N
 #define FLOW_RATE 0.018 // kg/s
 
-#define DIS_X  1.5
+#define DIS_X  0.7
 #define DIS_V  0
 
-#define DELTA_T 0.2
+#define DELTA_T 0.1
 #define KAPPA 0.2
 
 using namespace PSOPT;
+
+////////// Define Global Variables //////////
+double position = 0.0;
+double position_stamped;
+double velocity = 0.0;
+double velocity_stamped;
+double FmassEst = MF_INIT;
+
+std_msgs::Float32 control; // on-off control command
+std_msgs::Float32 cont_control; //continuous control command
+
+
+///////////////////////////////////////
+////////// PSOPT Config Part //////////
+///////////////////////////////////////
+
+////// Define the end point cost function ///////
+
+adouble endpoint_cost(adouble* initial_states, adouble* final_states,
+                      adouble* parameters, adouble& t0, adouble& tf,
+                      adouble* xad, int iphase, Workspace* workspace)
+{
+    // TODO: add end point error cost
+    adouble xf_error = final_states[0] - DIS_X;
+    adouble vf_error = final_states[1] = DIS_V;
+
+    return (xf_error*xf_error + vf_error*vf_error);
+
+
+}
+
+///////// Define Lagrange cost function /////////
+
+adouble integrand_cost(adouble* states, adouble* controls, adouble* parameters,
+                     adouble& time, adouble* xad, int iphase, Workspace* workspace)
+{
+    // TODO: Add control square cost
+    //adouble input = controls[0];
+
+    //return 0.5*input*input;
+    return 0;
+}
+
+/////// Define system dynamics ///////
+void dae(adouble* derivatives, adouble* path, adouble* states, adouble* controls, 
+         adouble* patameters, adouble& time, adouble* xad, int iphase, Workspace* workspace)
+         {
+            adouble xdot, vdot, mdot;
+
+            adouble x = states[0];
+            adouble v = states[1];
+            adouble m = states[2];
+
+            adouble u = controls[0];
+
+            xdot = v;
+            vdot = (M2-M1S-m)*G/(M2+M1S+m) + THRUST*u/(M2+M1S+m);
+            mdot = -FLOW_RATE*smooth_fabs(u, 0.01);
+
+            derivatives[0] = xdot;
+            derivatives[1] = vdot;
+            derivatives[2] = mdot;                   
+         }
+
+////////// Define the event function //////////
+void events(adouble* e, adouble* initial_states, adouble* final_states,
+            adouble* parameters, adouble& t0, adouble& tf, adouble* xad,
+            int iphase, Workspace* workspace)
+{
+    adouble x0 = initial_states[0];
+    adouble v0 = initial_states[1];
+    adouble m0 = initial_states[2];
+    
+
+    e[0] = x0;
+    e[1] = v0;
+    e[2] = m0;
+    
+}
+
+void linkages( adouble* linkages, adouble* xad, Workspace* workspace)
+{
+
+}
+
+/////////////////////////////////////
+////////// ROS Config Part //////////
+/////////////////////////////////////
+
+void poseCb(const geometry_msgs::PoseStamped::ConstPtr& msg)
+{
+    position = msg->pose.position.x; 
+    position_stamped = msg -> header.stamp.toSec();
+} 
+
+void velocityCb(const geometry_msgs::TwistStamped::ConstPtr& msg)
+{
+    velocity = msg->twist.linear.x;
+    velocity_stamped = msg -> header.stamp.toSec();
+}
+
+void massCb(const std_msgs::Float32::ConstPtr& msg)
+{
+    FmassEst = msg->data;
+}
 
 ///////// Contorl loop class definition /////////
 class MainControlLoop
@@ -42,11 +147,21 @@ class MainControlLoop
             solution = solutionIn;
             algorithm = algorithmIn;
 
-            Control_nh = nh;
-
             //Publish control (on-off)
             control_pub = nh->advertise<std_msgs::Float32>
-            ("control", 1);
+                ("control", 1);
+
+            // Publish the continuous control
+            cont_control_pub = nh->advertise<std_msgs::Float32>
+            ("cont_control",1);
+
+
+            // Timer initialization (duration 0.2 sec as default),
+            // oneshoot = true, autostart = false
+            timeToPub = nh->createTimer(ros::Duration(0.1), 
+                &MainControlLoop::PubControlCb, this, true, false);
+
+            
 
         }
         
@@ -57,7 +172,7 @@ class MainControlLoop
         Prob problem;
         Sol solution;
         Alg algorithm;
-        ros::NodeHandle *Control_nh;       
+             
         
 
         // vectors for rk4 propagate
@@ -65,13 +180,13 @@ class MainControlLoop
         
         
 
-        void GetNextControl()
+        void GetNextControl(const ros::TimerEvent& event)
         {
             curr_Time = ros::Time::now().toSec(); //get current time.
             curr_Time_a = (adouble) curr_Time;
             curr_Time_ref = curr_Time_a;
             stamp_now = position_stamped; // define t_i
-            stamp_next = stamp_now + 0.2; // define t_(i+1)
+            stamp_next = stamp_now + DELTA_T; // define t_(i+1)
 
             rk4_control(0,0) = last_control; rk4_control(0,1) = last_control;
             rk4_time(0,0) = stamp_now; rk4_time(0,1) = stamp_next;
@@ -126,6 +241,7 @@ class MainControlLoop
             MatrixXd uStar = solution.get_controls_in_phase(1);
             MatrixXd t_sol = solution.get_time_in_phase(1);
             next_control = uStar(0);
+            cont_control.data = next_control.value();
 
             // make a schidmit trigger to transform continuous command to on-off command
         
@@ -154,10 +270,9 @@ class MainControlLoop
 
             // create a timer to publish next_control at stamp_next.
             double time_now = ros::Time::now().toSec();
-            ros::Timer timeToPub =
-                Control_nh->createTimer(ros::Duration(stamp_next-time_now),
-                PubControlCb, true);
-
+            timeToPub.setPeriod(ros::Duration(stamp_next-time_now), true);
+            timeToPub.start(); // start the timer
+            
             last_control = next_control.value();
 
 
@@ -166,14 +281,18 @@ class MainControlLoop
 
         }
 
-        void PubControlCb()
+        void PubControlCb(const ros::TimerEvent& event)
         {
             control_pub.publish(control);
+            cont_control_pub.publish(cont_control);
+            timeToPub.stop();
 
         }
 
     private:
-        ros::Publisher control_pub;
+       ros::Publisher control_pub;
+       ros::Publisher cont_control_pub;
+       ros::Timer timeToPub;
         float last_control;
         adouble next_control;
         
@@ -181,107 +300,6 @@ class MainControlLoop
 
 };
 
-///////////////////////////////////////
-////////// PSOPT Config Part //////////
-///////////////////////////////////////
-
-////// Define the end point cost function ///////
-
-adouble endpoint_cost(adouble* initial_states, adouble* final_states,
-                      adouble* parameters, adouble& t0, adouble& tf,
-                      adouble* xad, int iphase, Workspace* workspace)
-{
-    // TODO: add end point error cost
-    adouble xf_error = final_states[0] - DIS_X;
-    adouble vf_error = final_states[1] = DIS_V;
-
-    return (xf_error*xf_error + vf_error*vf_error);
-
-
-}
-
-///////// Define Lagrange cost function /////////
-
-adouble integrand_cost(adouble* states, adouble* controls, adouble* parameters,
-                     adouble& time, adouble* xad, int iphase, Workspace* workspace)
-{
-    // TODO: Add control square cost
-    adouble input = controls[0];
-
-    return 0.5*input*input;
-    //return 0;
-}
-
-/////// Define system dynamics ///////
-void dae(adouble* derivatives, adouble* path, adouble* states, adouble* controls, 
-         adouble* patameters, adouble& time, adouble* xad, int iphase, Workspace* workspace)
-         {
-            adouble xdot, vdot, mdot;
-
-            adouble x = states[0];
-            adouble v = states[1];
-            adouble m = states[2];
-
-            adouble u = controls[0];
-
-            xdot = v;
-            vdot = (M2-M1S-m)*G/(M2+M1S+m) + THRUST*u/(M2+M1S+m);
-            mdot = -FLOW_RATE*smooth_fabs(u, 0.01);
-
-            derivatives[0] = xdot;
-            derivatives[1] = vdot;
-            derivatives[2] = mdot;                   
-         }
-
-////////// Define the event function //////////
-void events(adouble* e, adouble* initial_states, adouble* final_states,
-            adouble* parameters, adouble& t0, adouble& tf, adouble* xad,
-            int iphase, Workspace* workspace)
-{
-    adouble x0 = initial_states[0];
-    adouble v0 = initial_states[1];
-    adouble m0 = initial_states[2];
-    
-
-    e[0] = x0;
-    e[1] = v0;
-    e[2] = m0;
-    
-}
-
-void linkages( adouble* linkages, adouble* xad, Workspace* workspace)
-{
-
-}
-
-/////////////////////////////////////
-////////// ROS Config Part //////////
-/////////////////////////////////////
-double position = 0.0;
-double position_stamped;
-double velocity = 0.0;
-double velocity_stamped;
-double FmassEst = MF_INIT;
-
-std_msgs::Float32 control; // on-off control command
-std_msgs::Float32 cont_control; //continuous control command
-
-void poseCb(const geometry_msgs::PoseStamped::ConstPtr& msg)
-{
-    position = msg->pose.position.x; 
-    position_stamped = msg -> header.stamp.toSec();
-} 
-
-void velocityCb(const geometry_msgs::TwistStamped::ConstPtr& msg)
-{
-    velocity = msg->twist.linear.x;
-    velocity_stamped = msg -> header.stamp.toSec();
-}
-
-void massCb(const std_msgs::Float32::ConstPtr& msg)
-{
-    FmassEst = msg->data;
-}
 
 
 ////////////////////////////////
@@ -353,10 +371,7 @@ int main(int argc, char **argv)
     ros::Subscriber mass_sub = nh.subscribe<std_msgs::Float32>
         ("mass_est",1 , massCb);
 
-    // Publish the continuous control
-    ros::Publisher cont_control_pub = nh.advertise<std_msgs::Float32>
-        ("cont_control",1);
-
+    
     // create an instance of MainControlLoop
     MainControlLoop main_control_loop(&nh, problem, solution, algorithm);
 
@@ -369,7 +384,7 @@ int main(int argc, char **argv)
     ros::waitForShutdown();   
 
 
-    }
+    
 
 
 
