@@ -1,5 +1,11 @@
 /*************************************************************
 * 1-D Optimal control v0.2 
+* v0.3:
+* * Add x1_error into the integral cost.
+* v0.4 : This is the program for controller
+* A planner-controller structure.
+* A planner generates a minimum-time trajectory and updates per second.
+* The controller will track the optimal trajectory by minimizing the tracking error.
 
 *************************************************************/
 
@@ -17,11 +23,12 @@
 #define THRUST 15 // N
 #define FLOW_RATE 0.018 // kg/s
 
-#define DIS_X  0.7
+#define DIS_X  1.5//0.3
 #define DIS_V  0
 
-#define DELTA_T 0.1
-#define KAPPA 0.2
+#define DELTA_T 0.2
+#define KAPPA 0.0
+#define USE_SIM_TIME true
 
 using namespace PSOPT;
 
@@ -34,6 +41,10 @@ double FmassEst = MF_INIT;
 
 std_msgs::Float32 control; // on-off control command
 std_msgs::Float32 cont_control; //continuous control command
+/********** DEBUG INFORMATION ***************/
+std_msgs::Float32 timeStampToPub; // store and pub the value of stamp_next
+std_msgs::Float32 pubTimeStamp; // True timestamp when the control msg was published.
+/********************************************/
 
 
 ///////////////////////////////////////
@@ -48,9 +59,10 @@ adouble endpoint_cost(adouble* initial_states, adouble* final_states,
 {
     // TODO: add end point error cost
     adouble xf_error = final_states[0] - DIS_X;
-    adouble vf_error = final_states[1] = DIS_V;
+    adouble vf_error = final_states[1] - DIS_V;
 
-    return (xf_error*xf_error + vf_error*vf_error);
+    return (xf_error*xf_error + 0.1*vf_error*vf_error);
+    //return tf;
 
 
 }
@@ -61,10 +73,12 @@ adouble integrand_cost(adouble* states, adouble* controls, adouble* parameters,
                      adouble& time, adouble* xad, int iphase, Workspace* workspace)
 {
     // TODO: Add control square cost
-    //adouble input = controls[0];
+    adouble input = controls[0];
+    adouble x1_error = states[0] - DIS_X;
+    adouble v1_error = states[1] - DIS_V;
 
-    //return 0.5*input*input;
-    return 0;
+    return 0.5*input*input +(x1_error*x1_error);
+    //return 0;
 }
 
 /////// Define system dynamics ///////
@@ -96,11 +110,15 @@ void events(adouble* e, adouble* initial_states, adouble* final_states,
     adouble x0 = initial_states[0];
     adouble v0 = initial_states[1];
     adouble m0 = initial_states[2];
+    //adouble xf = final_states[0];
+    //adouble vf = final_states[1];
     
 
     e[0] = x0;
     e[1] = v0;
     e[2] = m0;
+    //e[3] = xf;
+    //e[4] = vf;
     
 }
 
@@ -153,7 +171,16 @@ class MainControlLoop
 
             // Publish the continuous control
             cont_control_pub = nh->advertise<std_msgs::Float32>
-            ("cont_control",1);
+                ("cont_control",1);
+
+            /**************** DEBUG INFORMATION****************/
+            // Publish the calculated stamp_next
+            calc_nextStamp_pub = nh -> advertise<std_msgs::Float32>
+                ("calc_nextStamp",1);
+            // Actual pub stamp
+            actual_stamp_pub = nh -> advertise<std_msgs::Float32>
+                ("actual_pub_stamp",1); 
+            /*************************************************/
 
 
             // Timer initialization (duration 0.2 sec as default),
@@ -187,14 +214,15 @@ class MainControlLoop
             curr_Time_ref = curr_Time_a;
             stamp_now = position_stamped; // define t_i
             stamp_next = stamp_now + DELTA_T; // define t_(i+1)
+            /*************** DEBUG INFORMATION ****************/
+            timeStampToPub.data = stamp_next;
+            /*************************************************/
 
             rk4_control(0,0) = last_control; rk4_control(0,1) = last_control;
             rk4_time(0,0) = stamp_now; rk4_time(0,1) = stamp_next;
             init_states(0,0) = position;
             init_states(1,0) = velocity; 
             init_states(2,0) = FmassEst;
-
-            //void(& daee)() = dae;
             
             // RK4 propagate to get next states extimate. rk4_states
             rk4_propagate(dae, rk4_control, rk4_time, 
@@ -224,8 +252,8 @@ class MainControlLoop
             problem.phases(1).bounds.lower.controls << -1.0;
             problem.phases(1).bounds.upper.controls << 1.0;
 
-            problem.phases(1).bounds.lower.events << position, velocity, FmassEst;//, 1.4, 0;
-            problem.phases(1).bounds.upper.events << position, velocity, FmassEst;//, 1.6, 0;
+            problem.phases(1).bounds.lower.events << position, velocity, FmassEst;//, 0.7, 0;
+            problem.phases(1).bounds.upper.events << position, velocity, FmassEst;//, 0.7, 0;
 
             problem.phases(1).bounds.lower.StartTime = stamp_next; 
             problem.phases(1).bounds.upper.StartTime = stamp_next;
@@ -238,6 +266,7 @@ class MainControlLoop
             if(solution.error_flag) exit(0);
 
             ////////// Create control signal //////////
+            MatrixXd xStar = solution.get_states_in_phase(1);
             MatrixXd uStar = solution.get_controls_in_phase(1);
             MatrixXd t_sol = solution.get_time_in_phase(1);
             next_control = uStar(0);
@@ -272,6 +301,14 @@ class MainControlLoop
             double time_now = ros::Time::now().toSec();
             timeToPub.setPeriod(ros::Duration(stamp_next-time_now), true);
             timeToPub.start(); // start the timer
+            /****************** DEBUG INFORMATION ***********************/
+            printf("stamp_last = %f \n", stamp_now);
+            printf("time now = %f \n", time_now);
+            printf("stamp_next = %f\n", stamp_next);
+
+            //plot(t_sol,xStar,problem.name + ":states", "times(s)", "states", "x v m");
+            //plot(t_sol,uStar,problem.name + ": control", "time (s)", "control", "u");
+            /**********************************************************/
             
             last_control = next_control.value();
 
@@ -283,8 +320,14 @@ class MainControlLoop
 
         void PubControlCb(const ros::TimerEvent& event)
         {
+            pubTimeStamp.data = ros::Time::now().toSec();
             control_pub.publish(control);
             cont_control_pub.publish(cont_control);
+            /**************DEBUG INFORMATION *********************/
+            calc_nextStamp_pub.publish(timeStampToPub);
+            actual_stamp_pub.publish(pubTimeStamp);
+            printf("actual publish time = %f", ros::Time::now().toSec());
+            /****************************************************/
             timeToPub.stop();
 
         }
@@ -292,6 +335,9 @@ class MainControlLoop
     private:
        ros::Publisher control_pub;
        ros::Publisher cont_control_pub;
+       /*****************8DEBUG INFORMATION ***************/
+       ros::Publisher calc_nextStamp_pub, actual_stamp_pub;
+       /***************************************************/
        ros::Timer timeToPub;
         float last_control;
         adouble next_control;
@@ -326,7 +372,7 @@ int main(int argc, char **argv)
     // define phase related information & do level 2 setup
     problem.phases(1).nstates = 3;
     problem.phases(1).ncontrols = 1;
-    problem.phases(1).nevents = 3;
+    problem.phases(1).nevents = 3;//5;
     problem.phases(1).npath = 0;
     problem.phases(1).nodes <<10;
     psopt_level2_setup(problem, algorithm);
@@ -356,6 +402,9 @@ int main(int argc, char **argv)
     ////////// ROS Setup //////////
     ros::init(argc, argv, "one_dim_ocp_node");
     ros::NodeHandle nh;
+
+    // Use Simulation Time Setting
+    nh.setParam("/use_sim_time", USE_SIM_TIME);
 
     // Create AsyncSpinner
     ros::AsyncSpinner spinner(0);

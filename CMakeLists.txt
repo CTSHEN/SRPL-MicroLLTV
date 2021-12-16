@@ -153,6 +153,7 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/srpl-micro-lltv_node.cpp)
 add_executable(one_dim_ocp src/one_dim_ocp.cpp)
+add_executable(one_dim_traj src/one_dim_traj.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -173,6 +174,13 @@ set(IPOPT_LIBRARIES_DIR /usr/local/lib/libipopt.so)
 set(ADOLC_LIBRARIES_DIR /usr/local/lib64/libadolc.so)
 set(PSOPT_LIBRARIES_DIR /usr/local/lib/PSOPT/libPSOPT.a)
 target_link_libraries( one_dim_ocp
+   ${catkin_LIBRARIES} 
+   ${ADOLC_LIBRARIES_DIR}
+   ${PSOPT_LIBRARIES_DIR}
+   ${IPOPT_LIBRARIES_DIR}
+ )
+
+ target_link_libraries( one_dim_traj
    ${catkin_LIBRARIES} 
    ${ADOLC_LIBRARIES_DIR}
    ${PSOPT_LIBRARIES_DIR}
