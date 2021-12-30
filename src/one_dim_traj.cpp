@@ -28,7 +28,8 @@
 
 #define USE_SIM_TIME true
 
-#define DELTA_T 0.2    //s, planning calculate time
+#define TRAJ_PLAN_HZ 2.0 // planning frequency
+#define DELTA_T 0.2    //s, control step size
 #define PLAN_HORIZON 2.5 //s
 #define STATE_HEIGHT 1 // define state index 1 as height
 #define STATE_VELOCITY 2
@@ -149,6 +150,8 @@ class TrajOpt
             rk4_states.resize(3,2);
             init_states.resize(3,1);
 
+            interpT.resize(1,13);
+
             problem = problemIn;
             solution = solutionIn;
             algorithm = algorithmIn;
@@ -171,10 +174,13 @@ class TrajOpt
         Prob problem;
         Sol solution;
         Alg algorithm;
-        adouble interpTime[13] = {0, 0.2, 0.4, 0.6, 0.8, 1.0,
-                                1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4};
-        adouble interpHeight[13];
-        adouble interpVelcity[13];
+        //adouble interpTime[13] = {0, 0.2, 0.4, 0.6, 0.8, 1.0,
+        //                        1.2, 1.4, 1.6, 1.8, 2.0, 2.2, 2.4};
+        //adouble interpHeight[13] = {0};
+        //adouble interpVelcity[13];
+        adouble interpScale = 1;
+        MatrixXd interpH, interpV, interpT;
+
 
         // vectors for rk4 propagate
         MatrixXd rk4_control, rk4_time, rk4_states, rk4_param, init_states;
@@ -205,9 +211,19 @@ class TrajOpt
             init_states(0,0) = position;
             init_states(1,0) = velocity;
             init_states(2,0) = FmassEst;
+            /// FOR DEBUG ///
+            printf("stamp_now = %f \n", stamp_now);
+            printf("lastest_control = %f \n", lastest_control);
+            printf("height = %f \n", position);
+            printf("velocity = %f \n", velocity);
+            //////////            
 
             rk4_propagate(dae, rk4_control, rk4_time,
                 init_states, rk4_param, problem, 1, rk4_states, NULL);
+
+            /// FOR DEBUG ///
+            printf("STATE PROPAGATED! \n");
+            /////////////////
 
             // Step 3 //
             int nnodes = problem.phases(1).nodes(0);
@@ -226,6 +242,9 @@ class TrajOpt
                 problem, 1, x0, NULL);
 
             problem.phases(1).guess.states = x0;
+            /// FOR DEBUG ///
+            printf("INITIAL GUESS GENERATED! \n");
+            /////////////////
 
             // Step 4 //
             ////////// problem bounds iinformation //////////
@@ -246,34 +265,51 @@ class TrajOpt
 
             ////////// Call PSOPT to solve the problem /////////
             psopt(solution, problem, algorithm);
-            if(solution.error_flag) exit(0);
+            if(solution.error_flag) { printf("ERROR FLAG!"); exit(0);}
 
             // Step 5 //
-            ////////// Get states and time //////////
-            //MatrixXd xStar = solution.get_states_in_phase(1);
-            //MatrixXd t_sol = solution.get_time_in_phase(1);
             
-
+            ////////// Get states and time //////////
+            MatrixXd xStar = solution.get_states_in_phase(1);
+            MatrixXd HStar = xStar.row(0);
+            MatrixXd VStar = xStar.row(1);
+            MatrixXd t_sol = solution.get_time_in_phase(1);
+            /****************DEBUG INFORMATION****************************/
+            //plot(t_sol,xStar,problem.name + ":states", "times(s)", "states", "x v m");
+            //plot(t_sol,uStar,problem.name + ": control", "time (s)", "control", "u");
+            /*************************************************************/
+            
+            printf("I AM HERE~ \n"); /// FOR DEBUG ///
             // Clear last path
             optTraj.poses.clear();
+            printf("PASS~~ \n");  /// FOR DEBUG ///
+            
             ////////// Interpolate states with interpTime //////////
-            for(int i = 0; i<(sizeof(interpTime)/sizeof(interpTime[0])); i++)
+            // Generate interpolate time
+            for (int i = 0; i<13; i++)
             {
-                // get height
-                get_interpolated_state(&interpHeight[i], STATE_HEIGHT, 1, interpTime[i], NULL, NULL);
-                // get velocity
-                get_interpolated_state(&interpVelcity[i], STATE_VELOCITY, 1, interpTime[i], NULL, NULL);
+                interpT(0,i) = stamp_next + 0.2*i;
+            }
+
+            // get interpolated height
+            lagrange_interpolation(interpH, interpT, t_sol, HStar);
+            // get interpolated velocity
+            lagrange_interpolation(interpV, interpT, t_sol, VStar);
+            
+            for (int i =0; i< interpT.size(); i++)
+            {
                 // assign height, velocity and time into posestamped and pushback to path
                 // poses.pose.position.x ---> velocity
                 // poses.pose.position.z ---> height
                 pose2PushBack.header.seq = i+1;
-                pose2PushBack.header.stamp.sec = stamp_next+interpTime[i].value();
-                pose2PushBack.pose.position.x = interpVelcity[i].value();
-                pose2PushBack.pose.position.z = interpHeight[i].value();
-                // pushback to path
+                pose2PushBack.header.stamp.sec = interpT(0,i);
+                pose2PushBack.pose.position.x = interpH(0,i);
+                pose2PushBack.pose.position.z = interpV(0,i);
+                //pushback to path
                 optTraj.poses.push_back(pose2PushBack);
-
             }
+            
+
 
             // Step 6 //
             double time_now = ros::Time::now().toSec();
@@ -288,6 +324,9 @@ class TrajOpt
         {
             optTraj.header.stamp = ros::Time::now();
             path_pub.publish(optTraj);
+            /*************** DEBUG INFORMATION*****************/
+            plot(interpT, interpH, " Planned Trajectory", "time(s)", "Height(m)", "x");
+            /**************************************************/
 
             timeToPub.stop();
         }
@@ -300,6 +339,7 @@ class TrajOpt
         float last_control;
         nav_msgs::Path optTraj;
         geometry_msgs::PoseStamped pose2PushBack;
+        
         
 
 };
@@ -328,7 +368,7 @@ int main(int argc, char **argv)
     // define phase related information & do level 2 setup
     problem.phases(1).nstates = 3;
     problem.phases(1).ncontrols = 1;
-    problem.phases(1).nevents = 3;//5;
+    problem.phases(1).nevents = 5;
     problem.phases(1).npath = 0;
     problem.phases(1).nodes <<10;
     psopt_level2_setup(problem, algorithm);
@@ -385,7 +425,7 @@ int main(int argc, char **argv)
 
     ////////// Setup control loop timer ////
     ros::Timer controlPubTimer = nh.createTimer
-        (ros::Duration(1.0/5.0),
+        (ros::Duration(1.0/TRAJ_PLAN_HZ),
         &TrajOpt::GenNextPath, &trajectory_optimization_loop);    
     
 
