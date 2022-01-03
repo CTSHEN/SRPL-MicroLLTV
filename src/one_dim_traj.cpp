@@ -9,6 +9,7 @@
  * *********************************************************/
 
 #include "psopt.h"
+#include <math.h>
 
 #include <ros/ros.h>
 #include <std_msgs/Float32.h>
@@ -303,7 +304,10 @@ class TrajOpt
                 // poses.pose.position.z ---> height
                 pose2PushBack.header.seq = i+1;
                 pose2PushBack.header.stamp.sec = interpT(0,i);
+                pose2PushBack.header.stamp.nsec = fmod(interpT(0,i),
+                     pose2PushBack.header.stamp.sec)*1e9;
                 pose2PushBack.pose.position.x = interpH(0,i);
+                printf("trajH is %f \n", pose2PushBack.pose.position.x);
                 pose2PushBack.pose.position.z = interpV(0,i);
                 //pushback to path
                 optTraj.poses.push_back(pose2PushBack);
@@ -325,7 +329,7 @@ class TrajOpt
             optTraj.header.stamp = ros::Time::now();
             path_pub.publish(optTraj);
             /*************** DEBUG INFORMATION*****************/
-            plot(interpT, interpH, " Planned Trajectory", "time(s)", "Height(m)", "x");
+            //plot(interpT, interpH, " Planned Trajectory", "time(s)", "Height(m)", "x");
             /**************************************************/
 
             timeToPub.stop();
@@ -396,7 +400,7 @@ int main(int argc, char **argv)
     //float last_control = 0.0;
 
     ////////// ROS Setup //////////
-    ros::init(argc, argv, "one_dim_ocp_node");
+    ros::init(argc, argv, "one_dim_traj_node");
     ros::NodeHandle nh;
 
     // Use Simulation Time Setting

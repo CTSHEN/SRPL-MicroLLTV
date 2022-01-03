@@ -15,6 +15,7 @@
 #include <geometry_msgs/PoseStamped.h>
 #include <geometry_msgs/TwistStamped.h>
 #include <std_msgs/Float32.h>
+#include <nav_msgs/Path.h>
 
 #define M2 8 // kg
 #define M1S 8.5 //kg
@@ -39,6 +40,9 @@ double velocity = 0.0;
 double velocity_stamped;
 double FmassEst = MF_INIT;
 
+MatrixXd trajH, trajV, trajT;  // matrices to store optimal trajectory
+
+nav_msgs::Path optTraj;
 std_msgs::Float32 control; // on-off control command
 std_msgs::Float32 cont_control; //continuous control command
 /********** DEBUG INFORMATION ***************/
@@ -57,14 +61,7 @@ adouble endpoint_cost(adouble* initial_states, adouble* final_states,
                       adouble* parameters, adouble& t0, adouble& tf,
                       adouble* xad, int iphase, Workspace* workspace)
 {
-    // TODO: add end point error cost
-    adouble xf_error = final_states[0] - DIS_X;
-    adouble vf_error = final_states[1] - DIS_V;
-
-    return (xf_error*xf_error + 0.1*vf_error*vf_error);
-    //return tf;
-
-
+    return 0;
 }
 
 ///////// Define Lagrange cost function /////////
@@ -72,13 +69,25 @@ adouble endpoint_cost(adouble* initial_states, adouble* final_states,
 adouble integrand_cost(adouble* states, adouble* controls, adouble* parameters,
                      adouble& time, adouble* xad, int iphase, Workspace* workspace)
 {
-    // TODO: Add control square cost
-    adouble input = controls[0];
-    adouble x1_error = states[0] - DIS_X;
-    adouble v1_error = states[1] - DIS_V;
-
-    return 0.5*input*input +(x1_error*x1_error);
-    //return 0;
+    // Define the interpolated states and cost
+    adouble intg_cost = 0;
+    adouble Herror, Verror;
+    adouble interpH, interpV, interpT;
+    for( int i = 0; i < trajT.size(); i++)
+    {
+        if (ros::Time::now().toSec() >= trajT(i)) continue;
+        interpT.setValue(trajT(i));
+        // Interpolate each states at correspond time stamp
+        get_interpolated_state(&interpH, 1, 1, interpT, xad, workspace);
+        get_interpolated_state(&interpV, 2, 1, interpT, xad, workspace);
+        //Herror.setValue(trajH(0,i) - interpH.value());
+        //Verror.setValue(trajV(0,i) - interpH.value());
+        //intg_cost = intg_cost + Herror*Herror + Verror*Verror;
+        intg_cost = intg_cost + (interpH - (adouble)trajH(0,i))*(interpH - (adouble)trajH(0,i)) + 
+            (interpV - (adouble)trajV(0,i))*(interpV - (adouble)trajV(0,i));
+        
+    }
+    return intg_cost;
 }
 
 /////// Define system dynamics ///////
@@ -146,6 +155,26 @@ void velocityCb(const geometry_msgs::TwistStamped::ConstPtr& msg)
 void massCb(const std_msgs::Float32::ConstPtr& msg)
 {
     FmassEst = msg->data;
+}
+
+void trajCb(const nav_msgs::Path::ConstPtr& msg)
+{
+    // Extract data from msg to MatrixXd
+    // header time ---> trajT
+    // position x  ---> trajH
+    // position z  ---> trajV
+    for(int i =0; i< msg->poses.size()-1; i++) 
+    {
+        // Abandon the last pose of the trajectory,
+        // There often exsits an interpolation error on the last pose.
+        trajT(0,i) = msg->poses[i].header.stamp.toSec();
+        trajH(0,i) = msg->poses[i].pose.position.x;
+        trajV(0,i) = msg->poses[i].pose.position.z;
+    }
+    //////// DEBUG INFORMATION //////////
+    /*plot(trajT, trajH, "Received Trajectory from topic",
+         "time(s)","Height(m)" );*/
+    /////////////////////////////////////
 }
 
 ///////// Contorl loop class definition /////////
@@ -271,6 +300,13 @@ class MainControlLoop
             MatrixXd t_sol = solution.get_time_in_phase(1);
             next_control = uStar(0);
             cont_control.data = next_control.value();
+
+            ////////// DEBUG INFORMATION //////////
+            // create a matrix combine ref traj and solution
+            //MatrixXd debug_plot(2, xStar.rows());
+            /*plot(t_sol, xStar.row(0),trajT, trajH, "Control trajectory & Ref trajectory",
+                "time(s)", "Height(m)", "ControlTraj RefTraj" );*/
+            /////////////////////////////////////////
 
             // make a schidmit trigger to transform continuous command to on-off command
         
@@ -399,6 +435,12 @@ int main(int argc, char **argv)
     //Intialize the last control signal
     //float last_control = 0.0;
 
+    // Initialize the buffer size of trajectory
+    // the trajectory contains 12 data points
+    trajT.resize(1,12);
+    trajH.resize(1,12);
+    trajV.resize(1,12);
+
     ////////// ROS Setup //////////
     ros::init(argc, argv, "one_dim_ocp_node");
     ros::NodeHandle nh;
@@ -420,6 +462,9 @@ int main(int argc, char **argv)
     ros::Subscriber mass_sub = nh.subscribe<std_msgs::Float32>
         ("mass_est",1 , massCb);
 
+    ros::Subscriber traj_sub = nh.subscribe<nav_msgs::Path>
+        ("optTraj", 1, trajCb);
+
     
     // create an instance of MainControlLoop
     MainControlLoop main_control_loop(&nh, problem, solution, algorithm);
@@ -427,7 +472,7 @@ int main(int argc, char **argv)
     ////////// Setup control loop timer ////
     ros::Timer controlPubTimer = nh.createTimer
         (ros::Duration(1.0/5.0),
-        &MainControlLoop::GetNextControl, &main_control_loop);    
+        &MainControlLoop::GetNextControl, &main_control_loop);
     
 
     ros::waitForShutdown();   
