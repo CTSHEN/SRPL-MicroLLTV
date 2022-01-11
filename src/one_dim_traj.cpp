@@ -151,7 +151,7 @@ class TrajOpt
             rk4_states.resize(3,2);
             init_states.resize(3,1);
 
-            interpT.resize(1,13);
+            //interpT.resize(1,13);
 
             problem = problemIn;
             solution = solutionIn;
@@ -283,19 +283,33 @@ class TrajOpt
             printf("I AM HERE~ \n"); /// FOR DEBUG ///
             // Clear last path
             optTraj.poses.clear();
-            printf("PASS~~ \n");  /// FOR DEBUG ///
-            
+                        
             ////////// Interpolate states with interpTime //////////
             // Generate interpolate time
-            for (int i = 0; i<13; i++)
+            //printf(" last t_sol is %f \n", t_sol.row(0).tail(1).value()); // FOR DEBUG
+            interpT.resize(1,(int)((t_sol.row(0).tail(1).value()-stamp_next)/0.2));
+            //printf("size of interpT = %d", interpT.cols()); //FOR DEBUG
+            for (int i = 0; i< interpT.cols(); i++)
             {
+                // There are 13 collocation points in default, if there are
+                // points greater than the time of the optimal solution,
+                // drop them.
+                //if(stamp_next+0.2*i > t_sol.row(0).tail(1).value()) break;
                 interpT(0,i) = stamp_next + 0.2*i;
+                //printf("GET TIME !\n ");  // FOR DEBUG
             }
 
             // get interpolated height
             lagrange_interpolation(interpH, interpT, t_sol, HStar);
             // get interpolated velocity
             lagrange_interpolation(interpV, interpT, t_sol, VStar);
+            ////////// DEBUG INFORMATION //////////
+            /*plot(t_sol, xStar.row(0), interpT, interpH, "Height sol and interpolation",
+                 "time (s)", "Height(m)", "sol interpH");
+            
+            plot(t_sol, xStar.row(1), interpT, interpV, "Velocity sol and interpolation",
+                 "time (s)", "Velocity(m/s)", "sol interpV");*/
+            ///////////////////////////////////////
             
             for (int i =0; i< interpT.size(); i++)
             {
@@ -304,11 +318,15 @@ class TrajOpt
                 // poses.pose.position.z ---> height
                 pose2PushBack.header.seq = i+1;
                 pose2PushBack.header.stamp.sec = interpT(0,i);
-                pose2PushBack.header.stamp.nsec = fmod(interpT(0,i),
-                     pose2PushBack.header.stamp.sec)*1e9;
+                pose2PushBack.header.stamp.nsec = fmod(interpT(0,i),1)*1e9;
                 pose2PushBack.pose.position.x = interpH(0,i);
-                printf("trajH is %f \n", pose2PushBack.pose.position.x);
                 pose2PushBack.pose.position.z = interpV(0,i);
+                printf("trajT %d.%d\t trajH %f\t trajV %f \n",
+                     pose2PushBack.header.stamp.sec,
+                     pose2PushBack.header.stamp.nsec,
+                     pose2PushBack.pose.position.x, 
+                     pose2PushBack.pose.position.z);
+                
                 //pushback to path
                 optTraj.poses.push_back(pose2PushBack);
             }
@@ -374,7 +392,7 @@ int main(int argc, char **argv)
     problem.phases(1).ncontrols = 1;
     problem.phases(1).nevents = 5;
     problem.phases(1).npath = 0;
-    problem.phases(1).nodes <<10;
+    problem.phases(1).nodes <<50;
     psopt_level2_setup(problem, algorithm);
 
     

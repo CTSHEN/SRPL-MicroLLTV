@@ -24,10 +24,11 @@
 #define THRUST 15 // N
 #define FLOW_RATE 0.018 // kg/s
 
-#define DIS_X  1.5//0.3
+#define DIS_X  0.5
 #define DIS_V  0
 
-#define DELTA_T 0.2
+#define CONTROL_HZ 10  // Be careful, adjust DELTA_T correspond to this parameter.
+#define DELTA_T 0.1
 #define KAPPA 0.0
 #define USE_SIM_TIME true
 
@@ -61,9 +62,7 @@ adouble endpoint_cost(adouble* initial_states, adouble* final_states,
                       adouble* parameters, adouble& t0, adouble& tf,
                       adouble* xad, int iphase, Workspace* workspace)
 {
-    adouble endH_error = (final_states[0] - (adouble)trajH.row(0).tail(1).value());
-    adouble endV_error = (final_states[1] - (adouble)trajV.row(0).tail(1).value());
-    return endH_error*endH_error + endV_error*endV_error;
+    return tf;
 }
 
 ///////// Define Lagrange cost function /////////
@@ -71,25 +70,7 @@ adouble endpoint_cost(adouble* initial_states, adouble* final_states,
 adouble integrand_cost(adouble* states, adouble* controls, adouble* parameters,
                      adouble& time, adouble* xad, int iphase, Workspace* workspace)
 {
-    // Define the interpolated states and cost
-    adouble intg_cost = 0;
-    adouble Herror, Verror;
-    adouble interpH, interpV, interpT;
-    for( int i = 0; i < trajT.size(); i++)
-    {
-        if (ros::Time::now().toSec() >= trajT(i)) continue;
-        interpT.setValue(trajT(i));
-        // Interpolate each states at correspond time stamp
-        get_interpolated_state(&interpH, 1, 1, interpT, xad, workspace);
-        get_interpolated_state(&interpV, 2, 1, interpT, xad, workspace);
-        //Herror.setValue(trajH(0,i) - interpH.value());
-        //Verror.setValue(trajV(0,i) - interpH.value());
-        //intg_cost = intg_cost + Herror*Herror + Verror*Verror;
-        intg_cost = intg_cost + (interpH - (adouble)trajH(0,i))*(interpH - (adouble)trajH(0,i)) + 
-            (interpV - (adouble)trajV(0,i))*(interpV - (adouble)trajV(0,i));
-        
-    }
-    return intg_cost;
+    return 0;
 }
 
 /////// Define system dynamics ///////
@@ -102,11 +83,13 @@ void dae(adouble* derivatives, adouble* path, adouble* states, adouble* controls
             adouble v = states[1];
             adouble m = states[2];
 
-            adouble u = controls[0];
+            adouble u1 = controls[0]; // Downward thruster
+            adouble u2 = controls[1]; // Upward thruster
 
             xdot = v;
-            vdot = (M2-M1S-m)*G/(M2+M1S+m) + THRUST*u/(M2+M1S+m);
-            mdot = -FLOW_RATE*smooth_fabs(u, 0.01);
+            vdot = (M2-M1S-m)*G/(M2+M1S+m) + THRUST*u1/(M2+M1S+m) 
+                    - THRUST*u2/(M2+M1S+m);
+            mdot = -FLOW_RATE*(u1+u2);
 
             derivatives[0] = xdot;
             derivatives[1] = vdot;
@@ -121,15 +104,15 @@ void events(adouble* e, adouble* initial_states, adouble* final_states,
     adouble x0 = initial_states[0];
     adouble v0 = initial_states[1];
     adouble m0 = initial_states[2];
-    //adouble xf = final_states[0];
-    //adouble vf = final_states[1];
+    adouble xf = final_states[0];
+    adouble vf = final_states[1];
     
 
     e[0] = x0;
     e[1] = v0;
     e[2] = m0;
-    //e[3] = xf;
-    //e[4] = vf;
+    e[3] = xf;
+    e[4] = vf;
     
 }
 
@@ -159,7 +142,7 @@ void massCb(const std_msgs::Float32::ConstPtr& msg)
     FmassEst = msg->data;
 }
 
-void trajCb(const nav_msgs::Path::ConstPtr& msg)
+/*void trajCb(const nav_msgs::Path::ConstPtr& msg)
 {
     // Extract data from msg to MatrixXd
     // header time ---> trajT
@@ -177,10 +160,10 @@ void trajCb(const nav_msgs::Path::ConstPtr& msg)
         //printf(" trajT %f trajH %f trajV %f\n", trajT(0,i),trajH(0,i),trajV(0,i)); //FOR DEBUG
     }
     //////// DEBUG INFORMATION //////////
-    /*plot(trajT, trajH, "Received Trajectory from topic",
-         "time(s)","Height(m)" );*/
+    plot(trajT, trajH, "Received Trajectory from topic",
+         "time(s)","Height(m)" );
     /////////////////////////////////////
-}
+}*/
 
 ///////// Contorl loop class definition /////////
 class MainControlLoop
@@ -189,8 +172,9 @@ class MainControlLoop
         MainControlLoop(ros::NodeHandle *nh,
             Prob &problemIn, Sol &solutionIn, Alg &algorithmIn)
         {
-            last_control = 0.0;
-            rk4_control.resize(1,2);
+            last_control.resize(2,1);
+            next_control.resize(2,1);
+            rk4_control.resize(2,2);
             rk4_time.resize(1,2);
             rk4_states.resize(3,2);
             init_states.resize(3,1);
@@ -252,7 +236,7 @@ class MainControlLoop
             timeStampToPub.data = stamp_next;
             /*************************************************/
 
-            rk4_control(0,0) = last_control; rk4_control(0,1) = last_control;
+            rk4_control.col(0) = last_control.col(0); rk4_control.col(1) = last_control.col(0);
             rk4_time(0,0) = stamp_now; rk4_time(0,1) = stamp_next;
             init_states(0,0) = position;
             init_states(1,0) = velocity; 
@@ -271,7 +255,7 @@ class MainControlLoop
             init_state_guess(2,0) = rk4_states(2,1);
             MatrixXd& init_state_guess_ref = init_state_guess;
 
-            problem.phases(1).guess.controls = last_control*ones(1,nnodes);
+            problem.phases(1).guess.controls = ones(2,nnodes);
             problem.phases(1).guess.time = linspace(stamp_next, stamp_next+2.5, nnodes);
             rk4_propagate(dae, problem.phases(1).guess.controls,
                 problem.phases(1).guess.time, init_state_guess_ref, rk4_param,
@@ -283,11 +267,11 @@ class MainControlLoop
             problem.phases(1).bounds.lower.states << 0, -2, 0;
             problem.phases(1).bounds.upper.states << 3, 2, MF_INIT;
 
-            problem.phases(1).bounds.lower.controls << -1.0;
-            problem.phases(1).bounds.upper.controls << 1.0;
+            problem.phases(1).bounds.lower.controls << 0.0, 0.0;
+            problem.phases(1).bounds.upper.controls << 1.0, 1.0;
 
-            problem.phases(1).bounds.lower.events << position, velocity, FmassEst;//, 0.7, 0;
-            problem.phases(1).bounds.upper.events << position, velocity, FmassEst;//, 0.7, 0;
+            problem.phases(1).bounds.lower.events << position, velocity, FmassEst, DIS_X, DIS_V;
+            problem.phases(1).bounds.upper.events << position, velocity, FmassEst, DIS_X, DIS_V;
 
             problem.phases(1).bounds.lower.StartTime = stamp_next; 
             problem.phases(1).bounds.upper.StartTime = stamp_next;
@@ -297,46 +281,50 @@ class MainControlLoop
 
             ////////// Call PSOPT to solve the problem //////////
             psopt(solution, problem, algorithm);
-            if(solution.error_flag) exit(0);
+            //if(solution.error_flag) exit(0);
 
             ////////// Create control signal //////////
             MatrixXd xStar = solution.get_states_in_phase(1);
             MatrixXd uStar = solution.get_controls_in_phase(1);
             MatrixXd t_sol = solution.get_time_in_phase(1);
-            next_control = uStar(0);
-            cont_control.data = next_control.value();
-
-            ////////// DEBUG INFORMATION //////////
-            // create a matrix combine ref traj and solution
-            //MatrixXd debug_plot(2, xStar.rows());
-            /*plot(t_sol, xStar.row(0),trajT, trajH, "Control trajectory & Ref trajectory",
-                "time(s)", "Height(m)", "ControlTraj RefTraj" );*/
-            /////////////////////////////////////////
-
-            // make a schidmit trigger to transform continuous command to on-off command
-        
-
-            if (last_control == 1)
+            MatrixXd lambda = solution.get_dual_costates_in_phase(1);
+            
+            ////////// Generate control signal from MP//////////
+            double mu_u1, mu_u2;
+            MatrixXd TDown, TUp;
+            TDown.resize(1,lambda.cols());
+            TUp.resize(1,lambda.cols());
+            for(int i = 0;i< lambda.cols(); i++)
             {
-                if(next_control.value() >= (1-KAPPA)*0.5) next_control.setValue(1);
-                else if(next_control.value() <= (1+KAPPA)*-0.5) next_control.setValue(-1);
-                else next_control.setValue(0);
-            }
-            else if (last_control == 0)
-            {
-                if(next_control.value() >= (1+KAPPA)*0.5) next_control.setValue(1);
-                else if(next_control.value() <= (1+KAPPA)*-0.5) next_control.setValue(-1);
-                else next_control.setValue(0);
-            }
-            else if (last_control == -1)
-            {
-                if(next_control.value() >= (1+KAPPA)*0.5) next_control.setValue(1);
-                else if(next_control.value() <= (1-KAPPA)*-0.5) next_control.setValue(-1);
-                else next_control.setValue(0);
-            }
-            else{ printf("last control error!"); exit(0);}
+                mu_u1 = lambda(2,i)*FLOW_RATE - lambda(1,i)/(M2+M1S+xStar(2,i));
+                mu_u2 = lambda(2,i)*FLOW_RATE + lambda(1,i)/(M2+M1S+xStar(2,i));    
 
-            control.data = next_control.value();
+                // For u1
+                if(mu_u1 >0) TDown(0,i) = 1;
+                else if(mu_u1 <= 0) TDown(0,i) = 0;
+                else { printf("mu_u1 error!\n"); exit(0);};
+
+                //FOR u2
+                if (mu_u2 >0) TUp(0,i) = 1;
+                else if(mu_u2 <=0) TUp(0,i) = 0;
+                else{ printf("mu_u2 error! \n"); exit(0);};
+            }
+            //printf("PLOT CONTORL \n");
+            //plot(t_sol,TDown,problem.name + ":TDown signal", "times(s)", "signal", "TDown");
+            //plot(t_sol,TUp,problem.name + ":TUp signal", "times(s)", "signal", "TUp");            
+            
+
+
+            //Generate next control
+            next_control(0,0) = TDown(0,0);
+            next_control(1,0) = TUp(0,0);
+            /*if (uStar(0,0)>=0.5) next_control(0,0) = 1;
+            else next_control(0,0) = 0;
+
+            if(uStar(1,0)>= 0.5) next_control(1,0) = 1;
+            else next_control(1,0) = 0;*/
+
+            control.data = next_control(0,0) - next_control(1,0);
 
             // create a timer to publish next_control at stamp_next.
             double time_now = ros::Time::now().toSec();
@@ -351,7 +339,7 @@ class MainControlLoop
             //plot(t_sol,uStar,problem.name + ": control", "time (s)", "control", "u");
             /**********************************************************/
             
-            last_control = next_control.value();
+            last_control = next_control;
 
 
 
@@ -363,7 +351,7 @@ class MainControlLoop
         {
             pubTimeStamp.data = ros::Time::now().toSec();
             control_pub.publish(control);
-            cont_control_pub.publish(cont_control);
+            //cont_control_pub.publish(cont_control);
             /**************DEBUG INFORMATION *********************/
             calc_nextStamp_pub.publish(timeStampToPub);
             actual_stamp_pub.publish(pubTimeStamp);
@@ -374,14 +362,14 @@ class MainControlLoop
         }
 
     private:
-       ros::Publisher control_pub;
-       ros::Publisher cont_control_pub;
-       /*****************8DEBUG INFORMATION ***************/
-       ros::Publisher calc_nextStamp_pub, actual_stamp_pub;
-       /***************************************************/
-       ros::Timer timeToPub;
-        float last_control;
-        adouble next_control;
+        ros::Publisher control_pub;
+        ros::Publisher cont_control_pub;
+        /*****************8DEBUG INFORMATION ***************/
+        ros::Publisher calc_nextStamp_pub, actual_stamp_pub;
+        /***************************************************/
+        ros::Timer timeToPub;
+        MatrixXd last_control;
+        MatrixXd next_control;
         
 
 
@@ -412,8 +400,8 @@ int main(int argc, char **argv)
 
     // define phase related information & do level 2 setup
     problem.phases(1).nstates = 3;
-    problem.phases(1).ncontrols = 1;
-    problem.phases(1).nevents = 3;//5;
+    problem.phases(1).ncontrols = 2;
+    problem.phases(1).nevents = 5;
     problem.phases(1).npath = 0;
     problem.phases(1).nodes <<10;
     psopt_level2_setup(problem, algorithm);
@@ -437,17 +425,16 @@ int main(int argc, char **argv)
 
     algorithm.collocation_method = "Legendre";
 
-    //Intialize the last control signal
-    //float last_control = 0.0;
+    
 
     // Initialize the buffer size of trajectory
     // the trajectory contains 12 data points
-    trajT.resize(1,12);
+    /*trajT.resize(1,12);
     trajH.resize(1,12);
-    trajV.resize(1,12);
+    trajV.resize(1,12);*/
 
     ////////// ROS Setup //////////
-    ros::init(argc, argv, "one_dim_ocp_node");
+    ros::init(argc, argv, "one_dim_ocp_MPver_node");
     ros::NodeHandle nh;
 
     // Use Simulation Time Setting
@@ -467,8 +454,8 @@ int main(int argc, char **argv)
     ros::Subscriber mass_sub = nh.subscribe<std_msgs::Float32>
         ("mass_est",1 , massCb);
 
-    ros::Subscriber traj_sub = nh.subscribe<nav_msgs::Path>
-        ("optTraj", 1, trajCb);
+    /*ros::Subscriber traj_sub = nh.subscribe<nav_msgs::Path>
+        ("optTraj", 1, trajCb);*/
 
     
     // create an instance of MainControlLoop
@@ -476,7 +463,7 @@ int main(int argc, char **argv)
 
     ////////// Setup control loop timer ////
     ros::Timer controlPubTimer = nh.createTimer
-        (ros::Duration(1.0/5.0),
+        (ros::Duration(1.0/CONTROL_HZ),
         &MainControlLoop::GetNextControl, &main_control_loop);
     
 
