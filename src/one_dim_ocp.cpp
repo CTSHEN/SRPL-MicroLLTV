@@ -17,6 +17,9 @@
 #include <std_msgs/Float32.h>
 #include <nav_msgs/Path.h>
 
+#define VERSION 1  // v0.2
+//#define VERSION 2  // v0.4
+
 #define M2 8 // kg
 #define M1S 8.5 //kg
 #define MF_INIT 0.5 //kg
@@ -24,16 +27,17 @@
 #define THRUST 15 // N
 #define FLOW_RATE 0.018 // kg/s
 
-#define DIS_X  1.5//0.3
+#define DIS_X  0.5//0.3
 #define DIS_V  0
 
-#define DELTA_T 0.2
+#define DELTA_T 0.1
 #define KAPPA 0.0
 #define USE_SIM_TIME true
 
 using namespace PSOPT;
 
 ////////// Define Global Variables //////////
+int version = VERSION;
 double position = 0.0;
 double position_stamped;
 double velocity = 0.0;
@@ -63,7 +67,20 @@ adouble endpoint_cost(adouble* initial_states, adouble* final_states,
 {
     adouble endH_error = (final_states[0] - (adouble)trajH.row(0).tail(1).value());
     adouble endV_error = (final_states[1] - (adouble)trajV.row(0).tail(1).value());
-    return endH_error*endH_error + endV_error*endV_error;
+    switch(version)
+    {
+        case 1:
+            return tf;
+            break;
+        case 2:
+            return endH_error*endH_error + endV_error*endV_error;
+            break;
+        default:
+            printf("VERSION SELECTION ERROR! \n"); exit(0);
+            break;
+
+    }
+    
 }
 
 ///////// Define Lagrange cost function /////////
@@ -75,42 +92,62 @@ adouble integrand_cost(adouble* states, adouble* controls, adouble* parameters,
     adouble intg_cost = 0;
     adouble Herror, Verror;
     adouble interpH, interpV, interpT;
-    for( int i = 0; i < trajT.size(); i++)
+    switch(version)
     {
-        if (ros::Time::now().toSec() >= trajT(i)) continue;
-        interpT.setValue(trajT(i));
-        // Interpolate each states at correspond time stamp
-        get_interpolated_state(&interpH, 1, 1, interpT, xad, workspace);
-        get_interpolated_state(&interpV, 2, 1, interpT, xad, workspace);
-        //Herror.setValue(trajH(0,i) - interpH.value());
-        //Verror.setValue(trajV(0,i) - interpH.value());
-        //intg_cost = intg_cost + Herror*Herror + Verror*Verror;
-        intg_cost = intg_cost + (interpH - (adouble)trajH(0,i))*(interpH - (adouble)trajH(0,i)) + 
-            (interpV - (adouble)trajV(0,i))*(interpV - (adouble)trajV(0,i));
+        case 1:
+            return 0;
+            break;
+        case 2:
+            for( int i = 0; i < trajT.size(); i++)
+            {
+                if (ros::Time::now().toSec() >= trajT(i)) continue;
+                interpT.setValue(trajT(i));
+                // Interpolate each states at correspond time stamp
+                get_interpolated_state(&interpH, 1, 1, interpT, xad, workspace);
+                get_interpolated_state(&interpV, 2, 1, interpT, xad, workspace);
+                //Herror.setValue(trajH(0,i) - interpH.value());
+                //Verror.setValue(trajV(0,i) - interpH.value());
+                //intg_cost = intg_cost + Herror*Herror + Verror*Verror;
+                intg_cost = intg_cost + (interpH - (adouble)trajH(0,i))*(interpH - (adouble)trajH(0,i)) + 
+                    (interpV - (adouble)trajV(0,i))*(interpV - (adouble)trajV(0,i));
         
+            }
+            return intg_cost;
+            break;
+
+        default:
+            printf("VERSIOIN SELECT ERROR!\n"); exit(0);
+            break;
+
     }
-    return intg_cost;
+    
 }
 
 /////// Define system dynamics ///////
 void dae(adouble* derivatives, adouble* path, adouble* states, adouble* controls, 
          adouble* patameters, adouble& time, adouble* xad, int iphase, Workspace* workspace)
          {
-            adouble xdot, vdot, mdot;
+            adouble xdot, vdot, mdot, fdot, fout; 
+            double tau = 0.15;
 
             adouble x = states[0];
             adouble v = states[1];
             adouble m = states[2];
+            adouble f = states[3];
 
             adouble u = controls[0];
+            
 
+            fdot = -29.04*f + 7.854*u;
+            fout = 56.96*f;
             xdot = v;
-            vdot = (M2-M1S-m)*G/(M2+M1S+m) + THRUST*u/(M2+M1S+m);
+            vdot = (M2-M1S-m)*G/(M2+M1S+m) + fout/(M2+M1S+m);
             mdot = -FLOW_RATE*smooth_fabs(u, 0.01);
 
             derivatives[0] = xdot;
             derivatives[1] = vdot;
-            derivatives[2] = mdot;                   
+            derivatives[2] = mdot;
+            derivatives[3] = fdot;                   
          }
 
 ////////// Define the event function //////////
@@ -118,18 +155,36 @@ void events(adouble* e, adouble* initial_states, adouble* final_states,
             adouble* parameters, adouble& t0, adouble& tf, adouble* xad,
             int iphase, Workspace* workspace)
 {
+    
     adouble x0 = initial_states[0];
     adouble v0 = initial_states[1];
     adouble m0 = initial_states[2];
-    //adouble xf = final_states[0];
-    //adouble vf = final_states[1];
-    
+    adouble xf = final_states[0];
+    adouble vf = final_states[1];
+    adouble f0 = initial_states[3];
+    switch(version)
+    {
+        case 1:
+            
+            e[0] = x0;
+            e[1] = v0;
+            e[2] = m0;
+            e[3] = xf;
+            e[4] = vf;
+            e[5] = f0;
+            break;
 
-    e[0] = x0;
-    e[1] = v0;
-    e[2] = m0;
-    //e[3] = xf;
-    //e[4] = vf;
+        case 2 :
+            e[0] = x0;
+            e[1] = v0;
+            e[2] = m0;
+            e[3] = f0; // TODO : Check this version!
+            break;
+            
+        default:
+            printf("VERSION SELECTION ERROR!\n"); exit(0);
+    }
+    
     
 }
 
@@ -190,10 +245,13 @@ class MainControlLoop
             Prob &problemIn, Sol &solutionIn, Alg &algorithmIn)
         {
             last_control = 0.0;
+            forceEst = 0.0;
             rk4_control.resize(1,2);
             rk4_time.resize(1,2);
-            rk4_states.resize(3,2);
-            init_states.resize(3,1);
+            rk4_states.resize(4,2);
+            init_states.resize(4,1);
+
+            Finterp_time.resize(1,1);
 
             problem = problemIn;
             solution = solutionIn;
@@ -238,6 +296,8 @@ class MainControlLoop
 
         // vectors for rk4 propagate
         MatrixXd rk4_control, rk4_time, rk4_states, rk4_param, init_states;
+        // For force interpolation
+        MatrixXd Finterp_time, Finterp, xStar_Force;
         
         
 
@@ -257,6 +317,7 @@ class MainControlLoop
             init_states(0,0) = position;
             init_states(1,0) = velocity; 
             init_states(2,0) = FmassEst;
+            init_states(3,0) = forceEst;  // aug force
             
             // RK4 propagate to get next states extimate. rk4_states
             rk4_propagate(dae, rk4_control, rk4_time, 
@@ -264,11 +325,12 @@ class MainControlLoop
 
             // Generate initial guess states with RK4
             int nnodes = problem.phases(1).nodes(0);
-            MatrixXd x0(3,nnodes);
-            MatrixXd init_state_guess(3,1);
+            MatrixXd x0(4,nnodes);
+            MatrixXd init_state_guess(4,1);
             init_state_guess(0,0) = rk4_states(0,1);
             init_state_guess(1,0) = rk4_states(1,1);
             init_state_guess(2,0) = rk4_states(2,1);
+            init_state_guess(3,0) = rk4_states(3,1); // aug force
             MatrixXd& init_state_guess_ref = init_state_guess;
 
             problem.phases(1).guess.controls = last_control*ones(1,nnodes);
@@ -280,14 +342,26 @@ class MainControlLoop
             problem.phases(1).guess.states = x0;
 
             ////////// problem bounds iinformation //////////
-            problem.phases(1).bounds.lower.states << 0, -2, 0;
-            problem.phases(1).bounds.upper.states << 3, 2, MF_INIT;
+            problem.phases(1).bounds.lower.states << 0, -2, 0, -15;
+            problem.phases(1).bounds.upper.states << 3, 2, MF_INIT, 15;
 
             problem.phases(1).bounds.lower.controls << -1.0;
             problem.phases(1).bounds.upper.controls << 1.0;
 
-            problem.phases(1).bounds.lower.events << position, velocity, FmassEst;//, 0.7, 0;
-            problem.phases(1).bounds.upper.events << position, velocity, FmassEst;//, 0.7, 0;
+            switch(version)
+            {
+                case 1:
+                    problem.phases(1).bounds.lower.events << position, velocity, FmassEst, DIS_X, DIS_V,forceEst-1;
+                    problem.phases(1).bounds.upper.events << position, velocity, FmassEst, DIS_X, DIS_V,forceEst+1;
+                    break;
+                case 2:
+                    problem.phases(1).bounds.lower.events << position, velocity, FmassEst,forceEst;//, 0.7, 0;
+                    problem.phases(1).bounds.upper.events << position, velocity, FmassEst,forceEst;//, 0.7, 0;
+                    break;
+                default:
+                    printf("VERSION SELECTION ERROR! \n"); exit(0);
+            }
+            
 
             problem.phases(1).bounds.lower.StartTime = stamp_next; 
             problem.phases(1).bounds.upper.StartTime = stamp_next;
@@ -304,6 +378,12 @@ class MainControlLoop
             MatrixXd uStar = solution.get_controls_in_phase(1);
             MatrixXd t_sol = solution.get_time_in_phase(1);
             next_control = uStar(0);
+            // Interpolate force at next time stamp as forceEst
+            
+            Finterp_time << (stamp_next+DELTA_T);
+            xStar_Force = xStar.row(3);
+            lagrange_interpolation(Finterp, Finterp_time, t_sol, xStar_Force);
+            forceEst = Finterp(0,0); // aug force
             cont_control.data = next_control.value();
 
             ////////// DEBUG INFORMATION //////////
@@ -382,6 +462,7 @@ class MainControlLoop
        ros::Timer timeToPub;
         float last_control;
         adouble next_control;
+        float forceEst;
         
 
 
@@ -411,9 +492,19 @@ int main(int argc, char **argv)
     psopt_level1_setup(problem);
 
     // define phase related information & do level 2 setup
-    problem.phases(1).nstates = 3;
+    problem.phases(1).nstates = 4;
     problem.phases(1).ncontrols = 1;
-    problem.phases(1).nevents = 3;//5;
+    switch(version)
+    {
+        case 1:
+            problem.phases(1).nevents = 6;
+            break;
+        case 2:
+            problem.phases(1).nevents = 4;
+            break;
+        default:
+            printf("VERSION SELECT ERROR!\n"); exit(0);
+    }
     problem.phases(1).npath = 0;
     problem.phases(1).nodes <<10;
     psopt_level2_setup(problem, algorithm);
@@ -433,7 +524,7 @@ int main(int argc, char **argv)
     algorithm.scaling = "automatic";
     algorithm.derivatives = "automatic";
     algorithm.nlp_iter_max = 50;
-    algorithm.nlp_tolerance = 1e-6;
+    algorithm.nlp_tolerance = 1e-4;
 
     algorithm.collocation_method = "Legendre";
 
@@ -476,7 +567,7 @@ int main(int argc, char **argv)
 
     ////////// Setup control loop timer ////
     ros::Timer controlPubTimer = nh.createTimer
-        (ros::Duration(1.0/5.0),
+        (ros::Duration(DELTA_T),
         &MainControlLoop::GetNextControl, &main_control_loop);
     
 

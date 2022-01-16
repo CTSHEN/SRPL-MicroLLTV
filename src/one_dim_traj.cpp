@@ -30,7 +30,7 @@
 #define USE_SIM_TIME true
 
 #define TRAJ_PLAN_HZ 2.0 // planning frequency
-#define DELTA_T 0.2    //s, control step size
+#define DELTA_T 0.1    //s, control step size
 #define PLAN_HORIZON 2.5 //s
 #define STATE_HEIGHT 1 // define state index 1 as height
 #define STATE_VELOCITY 2
