@@ -67,10 +67,13 @@ adouble endpoint_cost(adouble* initial_states, adouble* final_states,
 {
     adouble endH_error = (final_states[0] - (adouble)trajH.row(0).tail(1).value());
     adouble endV_error = (final_states[1] - (adouble)trajV.row(0).tail(1).value());
+    adouble HE = final_states[0] - (adouble)DIS_X;
+    adouble VE = final_states[1] - (adouble)DIS_V;
     switch(version)
     {
         case 1:
-            return tf;
+            //return tf;
+            return 10*HE*HE + tf;
             break;
         case 2:
             return endH_error*endH_error + endV_error*endV_error;
@@ -92,10 +95,13 @@ adouble integrand_cost(adouble* states, adouble* controls, adouble* parameters,
     adouble intg_cost = 0;
     adouble Herror, Verror;
     adouble interpH, interpV, interpT;
+    adouble HE = states[0] - (adouble)DIS_X;
+    adouble VE = states[1] - (adouble)DIS_V;
     switch(version)
     {
         case 1:
-            return 0;
+            //return 0;
+            return 20*HE*HE+ 1*controls[0]*controls[0];
             break;
         case 2:
             for( int i = 0; i < trajT.size(); i++)
@@ -297,7 +303,7 @@ class MainControlLoop
         // vectors for rk4 propagate
         MatrixXd rk4_control, rk4_time, rk4_states, rk4_param, init_states;
         // For force interpolation
-        MatrixXd Finterp_time, Finterp, xStar_Force;
+        MatrixXd Finterp_time, Finterp, xStar_Force, Uinterp;
         
         
 
@@ -342,8 +348,8 @@ class MainControlLoop
             problem.phases(1).guess.states = x0;
 
             ////////// problem bounds iinformation //////////
-            problem.phases(1).bounds.lower.states << 0, -2, 0, -15;
-            problem.phases(1).bounds.upper.states << 3, 2, MF_INIT, 15;
+            problem.phases(1).bounds.lower.states << 0, -0.5, 0, -15;
+            problem.phases(1).bounds.upper.states << 3, 0.8, MF_INIT, 15;
 
             problem.phases(1).bounds.lower.controls << -1.0;
             problem.phases(1).bounds.upper.controls << 1.0;
@@ -351,8 +357,8 @@ class MainControlLoop
             switch(version)
             {
                 case 1:
-                    problem.phases(1).bounds.lower.events << position, velocity, FmassEst, DIS_X, DIS_V,forceEst-1;
-                    problem.phases(1).bounds.upper.events << position, velocity, FmassEst, DIS_X, DIS_V,forceEst+1;
+                    problem.phases(1).bounds.lower.events << position, velocity, FmassEst, DIS_X, DIS_V,forceEst;
+                    problem.phases(1).bounds.upper.events << position, velocity, FmassEst, DIS_X, DIS_V,forceEst;
                     break;
                 case 2:
                     problem.phases(1).bounds.lower.events << position, velocity, FmassEst,forceEst;//, 0.7, 0;
@@ -377,13 +383,15 @@ class MainControlLoop
             MatrixXd xStar = solution.get_states_in_phase(1);
             MatrixXd uStar = solution.get_controls_in_phase(1);
             MatrixXd t_sol = solution.get_time_in_phase(1);
-            next_control = uStar(0);
+            //next_control = uStar(0);
             // Interpolate force at next time stamp as forceEst
             
             Finterp_time << (stamp_next+DELTA_T);
             xStar_Force = xStar.row(3);
             lagrange_interpolation(Finterp, Finterp_time, t_sol, xStar_Force);
+            lagrange_interpolation(Uinterp, Finterp_time, t_sol, uStar);
             forceEst = Finterp(0,0); // aug force
+            next_control = Uinterp(0,0);
             cont_control.data = next_control.value();
 
             ////////// DEBUG INFORMATION //////////
@@ -427,7 +435,7 @@ class MainControlLoop
             printf("time now = %f \n", time_now);
             printf("stamp_next = %f\n", stamp_next);
 
-            //plot(t_sol,xStar,problem.name + ":states", "times(s)", "states", "x v m");
+            //plot(t_sol,xStar.block<3,10>(0,0),problem.name + ":states", "times(s)", "states", "x v m");
             //plot(t_sol,uStar,problem.name + ": control", "time (s)", "control", "u");
             /**********************************************************/
             
