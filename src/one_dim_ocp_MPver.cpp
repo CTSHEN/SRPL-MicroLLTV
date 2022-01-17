@@ -62,7 +62,11 @@ adouble endpoint_cost(adouble* initial_states, adouble* final_states,
                       adouble* parameters, adouble& t0, adouble& tf,
                       adouble* xad, int iphase, Workspace* workspace)
 {
-    return tf;
+    adouble HE = final_states[0] - (adouble)DIS_X;
+    adouble VE = final_states[1] - (adouble)DIS_V;
+
+    return 10*HE*HE + tf;
+    //return tf;
 }
 
 ///////// Define Lagrange cost function /////////
@@ -70,7 +74,10 @@ adouble endpoint_cost(adouble* initial_states, adouble* final_states,
 adouble integrand_cost(adouble* states, adouble* controls, adouble* parameters,
                      adouble& time, adouble* xad, int iphase, Workspace* workspace)
 {
-    return 0;
+    adouble HE = states[0] - (adouble)DIS_X;
+    adouble VE = states[1] - (adouble)DIS_V;
+    return 20*HE*HE+ 0.5*(controls[0]*controls[0]+ controls[1]*controls[1]);
+    //return 0;
 }
 
 /////// Define system dynamics ///////
@@ -264,8 +271,8 @@ class MainControlLoop
             problem.phases(1).guess.states = x0;
 
             ////////// problem bounds iinformation //////////
-            problem.phases(1).bounds.lower.states << 0, -2, 0;
-            problem.phases(1).bounds.upper.states << 3, 2, MF_INIT;
+            problem.phases(1).bounds.lower.states << 0, -0.5, 0;
+            problem.phases(1).bounds.upper.states << 3, 0.5, MF_INIT;
 
             problem.phases(1).bounds.lower.controls << 0.0, 0.0;
             problem.phases(1).bounds.upper.controls << 1.0, 1.0;
@@ -300,13 +307,13 @@ class MainControlLoop
                 mu_u2 = lambda(2,i)*FLOW_RATE + lambda(1,i)/(M2+M1S+xStar(2,i));    
 
                 // For u1
-                if(mu_u1 >0) TDown(0,i) = 1;
-                else if(mu_u1 <= 0) TDown(0,i) = 0;
+                if(mu_u1 >0.20) TDown(0,i) = 1;
+                else if(mu_u1 <= 0.20) TDown(0,i) = 0;
                 else { printf("mu_u1 error!\n"); exit(0);};
 
                 //FOR u2
-                if (mu_u2 >0) TUp(0,i) = 1;
-                else if(mu_u2 <=0) TUp(0,i) = 0;
+                if (mu_u2 >0.25) TUp(0,i) = 1;
+                else if(mu_u2 <=0.25) TUp(0,i) = 0;
                 else{ printf("mu_u2 error! \n"); exit(0);};
             }
             //printf("PLOT CONTORL \n");
