@@ -6,11 +6,15 @@
 * A planner-controller structure.
 * A planner generates a minimum-time trajectory and updates per second.
 * The controller will track the optimal trajectory by minimizing the tracking error.
-*
+* 
 * MPver 1:
 *   Track a step input reference. The cost function contains position error and final
 *   time for end point cost; The position error and input penalty for integration cost.
 *
+* MPver2: 
+*   Consider thruster dynamics as states for planning a trajectory.
+*   The total 5 states: position, velocity, fuel mass, downward and upward thrust force.
+
 *************************************************************/
 
 #include "psopt.h"
@@ -31,6 +35,8 @@
 #define DIS_X  1.0
 #define DIS_V  0
 
+#define NNODES 10
+#define PLAN_HORIZON 2.5  // seconds
 #define CONTROL_HZ 10  // Be careful, adjust DELTA_T correspond to this parameter.
 #define DELTA_T 0.1
 #define KAPPA 0.0
@@ -88,23 +94,34 @@ adouble integrand_cost(adouble* states, adouble* controls, adouble* parameters,
 void dae(adouble* derivatives, adouble* path, adouble* states, adouble* controls, 
          adouble* patameters, adouble& time, adouble* xad, int iphase, Workspace* workspace)
          {
-            adouble xdot, vdot, mdot;
+            adouble xdot, vdot, mdot, fddot, fudot, fdout, fuout;
 
             adouble x = states[0];
             adouble v = states[1];
             adouble m = states[2];
+            adouble fd = states[3];
+            adouble fu = states[4];
 
             adouble u1 = controls[0]; // Downward thruster
             adouble u2 = controls[1]; // Upward thruster
 
+            ////////// Thruster Dynamics //////////
+            fddot = -27.7081*fd + 1.9349*u1;
+            fdout = 215.9683*fd;
+
+            fudot = -27.7081*fu + 1.9349*u2;
+            fuout = 215.9683*fu;
+            ///////////////////////////////////////
             xdot = v;
-            vdot = (M2-M1S-m)*G/(M2+M1S+m) + THRUST*u1/(M2+M1S+m) 
-                    - THRUST*u2/(M2+M1S+m);
+            vdot = (M2-M1S-m)*G/(M2+M1S+m) + fdout/(M2+M1S+m) 
+                    - fuout/(M2+M1S+m);
             mdot = -FLOW_RATE*(u1+u2);
 
             derivatives[0] = xdot;
             derivatives[1] = vdot;
-            derivatives[2] = mdot;                   
+            derivatives[2] = mdot;
+            derivatives[3] = fddot;
+            derivatives[4] = fudot;                   
          }
 
 ////////// Define the event function //////////
@@ -115,6 +132,8 @@ void events(adouble* e, adouble* initial_states, adouble* final_states,
     adouble x0 = initial_states[0];
     adouble v0 = initial_states[1];
     adouble m0 = initial_states[2];
+    adouble fd0 = initial_states[3];
+    adouble fu0 = initial_states[4];
     adouble xf = final_states[0];
     adouble vf = final_states[1];
     
@@ -124,6 +143,8 @@ void events(adouble* e, adouble* initial_states, adouble* final_states,
     e[2] = m0;
     e[3] = xf;
     e[4] = vf;
+    e[5] = fd0;
+    e[6] = fu0;
     
 }
 
@@ -153,28 +174,6 @@ void massCb(const std_msgs::Float32::ConstPtr& msg)
     FmassEst = msg->data;
 }
 
-/*void trajCb(const nav_msgs::Path::ConstPtr& msg)
-{
-    // Extract data from msg to MatrixXd
-    // header time ---> trajT
-    // position x  ---> trajH
-    // position z  ---> trajV
-    printf(" Traj Received!\n");
-    trajT.resize(1,msg->poses.size());
-    trajH.resize(1,msg->poses.size());
-    trajV.resize(1,msg->poses.size());
-    for(int i =0; i< msg->poses.size(); i++) 
-    {
-        trajT(0,i) = msg->poses[i].header.stamp.toSec();
-        trajH(0,i) = msg->poses[i].pose.position.x;
-        trajV(0,i) = msg->poses[i].pose.position.z;
-        //printf(" trajT %f trajH %f trajV %f\n", trajT(0,i),trajH(0,i),trajV(0,i)); //FOR DEBUG
-    }
-    //////// DEBUG INFORMATION //////////
-    plot(trajT, trajH, "Received Trajectory from topic",
-         "time(s)","Height(m)" );
-    /////////////////////////////////////
-}*/
 
 ///////// Contorl loop class definition /////////
 class MainControlLoop
@@ -187,8 +186,13 @@ class MainControlLoop
             next_control.resize(2,1);
             rk4_control.resize(2,2);
             rk4_time.resize(1,2);
-            rk4_states.resize(3,2);
-            init_states.resize(3,1);
+            rk4_states.resize(5,2);
+            init_states.resize(5,1);
+            ForceEst.resize(2,1);
+            ForceEst<<0,0;
+            Finterp_time.resize(1,1);
+            FinterpD.resize(1,1);
+            FinterpU.resize(1,1);
 
             problem = problemIn;
             solution = solutionIn;
@@ -233,6 +237,8 @@ class MainControlLoop
 
         // vectors for rk4 propagate
         MatrixXd rk4_control, rk4_time, rk4_states, rk4_param, init_states;
+        // For force interpolation
+        MatrixXd Finterp_time, FinterpD,FinterpU, xStar_ForceD, xStar_ForceU, Uinterp;
         
         
 
@@ -252,6 +258,10 @@ class MainControlLoop
             init_states(0,0) = position;
             init_states(1,0) = velocity; 
             init_states(2,0) = FmassEst;
+            printf("FORCE INITIAL \n");
+            init_states(3,0) = ForceEst(0,0);
+            init_states(4,0) = ForceEst(1,0);
+            printf("INITIAL FINISHED! \n");
             
             // RK4 propagate to get next states extimate. rk4_states
             rk4_propagate(dae, rk4_control, rk4_time, 
@@ -259,15 +269,17 @@ class MainControlLoop
 
             // Generate initial guess states with RK4
             int nnodes = problem.phases(1).nodes(0);
-            MatrixXd x0(3,nnodes);
-            MatrixXd init_state_guess(3,1);
+            MatrixXd x0(5,nnodes);
+            MatrixXd init_state_guess(5,1);
             init_state_guess(0,0) = rk4_states(0,1);
             init_state_guess(1,0) = rk4_states(1,1);
             init_state_guess(2,0) = rk4_states(2,1);
+            init_state_guess(3,0) = rk4_states(3,1);
+            init_state_guess(4,0) = rk4_states(4,1);
             MatrixXd& init_state_guess_ref = init_state_guess;
 
             problem.phases(1).guess.controls = ones(2,nnodes);
-            problem.phases(1).guess.time = linspace(stamp_next, stamp_next+2.5, nnodes);
+            problem.phases(1).guess.time = linspace(stamp_next, stamp_next+PLAN_HORIZON, nnodes);
             rk4_propagate(dae, problem.phases(1).guess.controls,
                 problem.phases(1).guess.time, init_state_guess_ref, rk4_param,
                 problem, 1, x0, NULL);
@@ -275,20 +287,22 @@ class MainControlLoop
             problem.phases(1).guess.states = x0;
 
             ////////// problem bounds iinformation //////////
-            problem.phases(1).bounds.lower.states << 0, -0.5, 0;
-            problem.phases(1).bounds.upper.states << 3, 0.5, MF_INIT;
+            problem.phases(1).bounds.lower.states << 0, -0.5, 0.0, 0.0, 0.0;
+            problem.phases(1).bounds.upper.states << 3, 0.5, MF_INIT, 15, 15;
 
             problem.phases(1).bounds.lower.controls << 0.0, 0.0;
             problem.phases(1).bounds.upper.controls << 1.0, 1.0;
 
-            problem.phases(1).bounds.lower.events << position, velocity, FmassEst, DIS_X, DIS_V;
-            problem.phases(1).bounds.upper.events << position, velocity, FmassEst, DIS_X, DIS_V;
+            problem.phases(1).bounds.lower.events 
+                << position, velocity, FmassEst, DIS_X, DIS_V, 0,0;//ForceEst(0,0)-1,ForceEst(1,0)-1;
+            problem.phases(1).bounds.upper.events
+                 << position, velocity, FmassEst, DIS_X, DIS_V,0,0; //ForceEst(0,0)+1,ForceEst(1,0)+1;
 
             problem.phases(1).bounds.lower.StartTime = stamp_next; 
             problem.phases(1).bounds.upper.StartTime = stamp_next;
 
             problem.phases(1).bounds.lower.EndTime = stamp_next;
-            problem.phases(1).bounds.upper.EndTime = stamp_next+2.5;
+            problem.phases(1).bounds.upper.EndTime = stamp_next+PLAN_HORIZON;
 
             ////////// Call PSOPT to solve the problem //////////
             psopt(solution, problem, algorithm);
@@ -299,16 +313,28 @@ class MainControlLoop
             MatrixXd uStar = solution.get_controls_in_phase(1);
             MatrixXd t_sol = solution.get_time_in_phase(1);
             MatrixXd lambda = solution.get_dual_costates_in_phase(1);
-            
+            ////////// Interpolate Force at next time stamp as forceEst //////////
+            printf("FORCE INTERPOLATE!\n");
+            Finterp_time << (stamp_next+DELTA_T);
+            printf("START!\n");
+            xStar_ForceD = xStar.block<1,NNODES>(3,0);  // a 1xNNODES matrix
+            xStar_ForceU = xStar.block<1,NNODES>(4,0);  // a 1xNNODES matrix
+            lagrange_interpolation(FinterpD, Finterp_time, t_sol, xStar_ForceD);
+            lagrange_interpolation(FinterpU, Finterp_time, t_sol, xStar_ForceU);
+            lagrange_interpolation(Uinterp, Finterp_time, t_sol, uStar);
+            printf("INTERPOLATE FINISH! \n");
+            ForceEst(0,0) = FinterpD(0,0);
+            ForceEst(1,0) = FinterpU(0,0);
             ////////// Generate control signal from MP//////////
+            printf("GENERATE CONTROL FROM MP \n");
             double mu_u1, mu_u2;
             MatrixXd TDown, TUp;
             TDown.resize(1,lambda.cols());
             TUp.resize(1,lambda.cols());
             for(int i = 0;i< lambda.cols(); i++)
             {
-                mu_u1 = lambda(2,i)*FLOW_RATE - lambda(1,i)/(M2+M1S+xStar(2,i));
-                mu_u2 = lambda(2,i)*FLOW_RATE + lambda(1,i)/(M2+M1S+xStar(2,i));    
+                mu_u1 = lambda(2,i)*FLOW_RATE + lambda(3,i)*7.854;
+                mu_u2 = lambda(2,i)*FLOW_RATE + lambda(4,i)*7.854;    
 
                 // For u1
                 if(mu_u1 >0.25) TDown(0,i) = 1;
@@ -329,12 +355,7 @@ class MainControlLoop
             //Generate next control
             next_control(0,0) = TDown(0,0);
             next_control(1,0) = TUp(0,0);
-            /*if (uStar(0,0)>=0.5) next_control(0,0) = 1;
-            else next_control(0,0) = 0;
-
-            if(uStar(1,0)>= 0.5) next_control(1,0) = 1;
-            else next_control(1,0) = 0;*/
-
+            
             control.data = next_control(0,0) - next_control(1,0);
 
             // create a timer to publish next_control at stamp_next.
@@ -346,7 +367,7 @@ class MainControlLoop
             printf("time now = %f \n", time_now);
             printf("stamp_next = %f\n", stamp_next);
 
-            //plot(t_sol,xStar,problem.name + ":states", "times(s)", "states", "x v m");
+            //plot(t_sol,xStar.block<3,10>(0,0),problem.name + ":states", "times(s)", "states", "x v m");
             //plot(t_sol,uStar,problem.name + ": control", "time (s)", "control", "u");
             /**********************************************************/
             
@@ -381,6 +402,7 @@ class MainControlLoop
         ros::Timer timeToPub;
         MatrixXd last_control;
         MatrixXd next_control;
+        MatrixXd ForceEst; // a column vector stores [TDown, TUp] estimate.
         
 
 
@@ -410,11 +432,11 @@ int main(int argc, char **argv)
     psopt_level1_setup(problem);
 
     // define phase related information & do level 2 setup
-    problem.phases(1).nstates = 3;
+    problem.phases(1).nstates = 5;
     problem.phases(1).ncontrols = 2;
-    problem.phases(1).nevents = 5;
+    problem.phases(1).nevents = 7;
     problem.phases(1).npath = 0;
-    problem.phases(1).nodes <<10;
+    problem.phases(1).nodes <<NNODES;
     psopt_level2_setup(problem, algorithm);
 
     
@@ -432,7 +454,7 @@ int main(int argc, char **argv)
     algorithm.scaling = "automatic";
     algorithm.derivatives = "automatic";
     algorithm.nlp_iter_max = 50;
-    algorithm.nlp_tolerance = 1e-4;
+    algorithm.nlp_tolerance = 1e-3;
 
     algorithm.collocation_method = "Legendre";
 
@@ -445,7 +467,7 @@ int main(int argc, char **argv)
     trajV.resize(1,12);*/
 
     ////////// ROS Setup //////////
-    ros::init(argc, argv, "one_dim_ocp_MPver_node");
+    ros::init(argc, argv, "one_dim_ocp_MPver2_node");
     ros::NodeHandle nh;
 
     // Use Simulation Time Setting
