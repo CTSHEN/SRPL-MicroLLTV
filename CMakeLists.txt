@@ -15,7 +15,7 @@ find_package(catkin REQUIRED COMPONENTS
   roscpp
   rospy
   std_msgs
-  tf
+  #tf
 )
 
 
@@ -121,16 +121,12 @@ catkin_package(
 ## Specify additional locations of header files
 ## Your package locations should be listed before other locations
 set(PSOPT_INCLUDE_DIR /usr/local/include/PSOPT)
-#set(PSOPT_INCLUDE_DIR ${PSOPT_PREFIX_DIR}/include ${PSOPT_PREFIX_DIR}/src)
+find_package(Eigen3 REQUIRED NO_MODULE)
 
 
-SET( EIGEN3_INCLUDE_DIR /usr/local/include/eigen-3.3.9 )
-IF( NOT EIGEN3_INCLUDE_DIR )
-    MESSAGE( FATAL_ERROR "Please point the environment variable EIGEN3_INCLUDE_DIR to the include directory of your Eigen3 installation.")
-ENDIF()
-
+SET( EIGEN3_INCLUDE_DIR /usr/include/eigen3 )
 SET( IPOPT_INCLUDE_DIR /usr/local/include/coin-or)
-SET( ADOLC_INCLUDE_DIR /usr/local/include/adolc)
+SET( ADOLC_INCLUDE_DIR /usr/include/adolc)
 
 include_directories(
   #include
@@ -157,7 +153,7 @@ include_directories(
 ## The recommended prefix ensures that target names across packages don't collide
 # add_executable(${PROJECT_NAME}_node src/srpl-micro-lltv_node.cpp)
 add_executable(one_dim_ocp src/one_dim_ocp.cpp)
-add_executable(one_dim_ocp_MPver src/one_dim_ocp_MPver.cpp)
+#add_executable(one_dim_ocp_MPver src/one_dim_ocp_MPver.cpp)
 add_executable(one_dim_ocp_MPver2 src/one_dim_ocp_MPver2.cpp)
 add_executable(one_dim_traj src/one_dim_traj.cpp)
 
@@ -177,13 +173,14 @@ add_executable(one_dim_traj src/one_dim_traj.cpp)
 #   ${catkin_LIBRARIES}
 # )
 set(IPOPT_LIBRARIES_DIR /usr/local/lib/libipopt.so)
-set(ADOLC_LIBRARIES_DIR /usr/local/lib64/libadolc.so)
+set(ADOLC_LIBRARIES_DIR /usr/lib/aarch64-linux-gnu/libadolc.so)
 set(PSOPT_LIBRARIES_DIR /usr/local/lib/PSOPT/libPSOPT.a)
 target_link_libraries( one_dim_ocp
-   ${catkin_LIBRARIES} 
+   ${catkin_LIBRARIES}
    ${ADOLC_LIBRARIES_DIR}
    ${PSOPT_LIBRARIES_DIR}
    ${IPOPT_LIBRARIES_DIR}
+   
  )
 
  target_link_libraries( one_dim_traj
@@ -193,12 +190,12 @@ target_link_libraries( one_dim_ocp
    ${IPOPT_LIBRARIES_DIR}
  )
 
- target_link_libraries( one_dim_ocp_MPver
-   ${catkin_LIBRARIES} 
-   ${ADOLC_LIBRARIES_DIR}
-   ${PSOPT_LIBRARIES_DIR}
-   ${IPOPT_LIBRARIES_DIR}
- )
+ #target_link_libraries( one_dim_ocp_MPver
+ #  ${catkin_LIBRARIES} 
+ #  ${ADOLC_LIBRARIES_DIR}
+ #  ${PSOPT_LIBRARIES_DIR}
+ #  ${IPOPT_LIBRARIES_DIR}
+ #)
 
  target_link_libraries( one_dim_ocp_MPver2
    ${catkin_LIBRARIES} 
