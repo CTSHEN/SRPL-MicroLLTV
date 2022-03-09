@@ -38,7 +38,7 @@ def get_distance():
 		result = bus.read_i2c_block_data(address,reg_meas_low, 2)
 		measure = ((result[1] & 0xFF) << 8) | (result[0] & 0xFF)
 		#convert measure data from float16 to float32
-		measure64 = np.float64(measure)
+		measure64 = np.float64(measure)/100  # in meters
 		print(measure64)
 
 		height_data.header.stamp = rospy.get_rostime()
