@@ -479,10 +479,10 @@ int main(int argc, char **argv)
 
     // subcribe height, velocity and mass estimate
     ros::Subscriber pose_sub = nh.subscribe<geometry_msgs::PoseStamped>
-        ("height", 1, poseCb);
+        ("height_est", 1, poseCb);
 
     ros::Subscriber velocity_sub = nh.subscribe<geometry_msgs::TwistStamped>
-        ("velocity", 1, velocityCb);
+        ("velocity_est", 1, velocityCb);
 
     ros::Subscriber mass_sub = nh.subscribe<std_msgs::Float32>
         ("mass_est",1 , massCb);

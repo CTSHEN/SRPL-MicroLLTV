@@ -19,7 +19,7 @@ reg_accuracy = 0xEB
 bus = SMBus(i2c_channel)
 
 def get_distance():
-	pub = rospy.Publisher('height', PointStamped , queue_size=1)
+	pub = rospy.Publisher('height_measure', PointStamped , queue_size=1)
 	rospy.init_node('laser_measure', anonymous=True)
 	rate = rospy.Rate(20)  # Publish distance at 20Hz
 	# Lidar adjust accuracy & speed
