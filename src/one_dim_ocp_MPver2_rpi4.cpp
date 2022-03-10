@@ -1,21 +1,21 @@
-/*************************************************************
-* 1-D Optimal control v0.2 
-* v0.3:
-* * Add x1_error into the integral cost.
-* v0.4 : This is the program for controller
-* A planner-controller structure.
-* A planner generates a minimum-time trajectory and updates per second.
-* The controller will track the optimal trajectory by minimizing the tracking error.
-* 
-* MPver 1:
-*   Track a step input reference. The cost function contains position error and final
-*   time for end point cost; The position error and input penalty for integration cost.
-*
-* MPver2: 
-*   Consider thruster dynamics as states for planning a trajectory.
-*   The total 5 states: position, velocity, fuel mass, downward and upward thrust force.
-
-*************************************************************/
+/**
+ * @brief 1-D Hieght optimal control 
+ * 
+ * @version MPver2_rpi4
+ * 
+ * @note  MPver 1:
+ *           Track a step input reference. The cost function contains position error and final
+ *           time for end point cost; The position error and input penalty for integration cost.
+ *        MPver2: 
+ *           Consider thruster dynamics as states for planning a trajectory.
+ *           The total 5 states: position, velocity, fuel mass, downward and upward thrust force.
+ *        MPver2_rpi4:
+ *           This version modifies the MPver2 for implementation on raspberry pi 4. The
+ *           modification includes
+ *              1. Output two indivisual control topics for dawnward and upward thrusters.
+ *             //TODO 2. Direct output the on-off control signal to GPIO.  
+ * @author Shen Chang-te
+ */
 
 #include "psopt.h"
 
@@ -56,10 +56,9 @@ MatrixXd trajH, trajV, trajT;  // matrices to store optimal trajectory
 nav_msgs::Path optTraj;
 std_msgs::Float32 control; // on-off control command
 std_msgs::Float32 cont_control; //continuous control command
-/********** DEBUG INFORMATION ***************/
-std_msgs::Float32 timeStampToPub; // store and pub the value of stamp_next
-std_msgs::Float32 pubTimeStamp; // True timestamp when the control msg was published.
-/********************************************/
+std_msgs::Float32 TD_cmd; // on-off command for down thruster
+std_msgs::Float32 TU_cmd; // on-off command for up thruster
+
 
 
 ///////////////////////////////////////
@@ -206,16 +205,13 @@ class MainControlLoop
             cont_control_pub = nh->advertise<std_msgs::Float32>
                 ("cont_control",1);
 
-            /**************** DEBUG INFORMATION****************/
-            // Publish the calculated stamp_next
-            calc_nextStamp_pub = nh -> advertise<std_msgs::Float32>
-                ("calc_nextStamp",1);
-            // Actual pub stamp
-            actual_stamp_pub = nh -> advertise<std_msgs::Float32>
-                ("actual_pub_stamp",1); 
-            /*************************************************/
-
-
+            //! Publish the control of TDown and TUp
+            TD_pub = nh->advertise<std_msgs::Float32>
+                ("TD_cmd", 1);
+            
+            TU_pub = nh->advertise<std_msgs::Float32>
+                ("TU_cmd", 1);
+            
             // Timer initialization (duration 0.2 sec as default),
             // oneshoot = true, autostart = false
             timeToPub = nh->createTimer(ros::Duration(0.1), 
@@ -249,9 +245,7 @@ class MainControlLoop
             curr_Time_ref = curr_Time_a;
             stamp_now = position_stamped; // define t_i
             stamp_next = stamp_now + DELTA_T; // define t_(i+1)
-            /*************** DEBUG INFORMATION ****************/
-            timeStampToPub.data = stamp_next;
-            /*************************************************/
+            
 
             rk4_control.col(0) = last_control.col(0); rk4_control.col(1) = last_control.col(0);
             rk4_time(0,0) = stamp_now; rk4_time(0,1) = stamp_next;
@@ -358,19 +352,18 @@ class MainControlLoop
             
             control.data = next_control(0,0) - next_control(1,0);
 
+            // Push data into TD_cmd and TU_cmd, check if data is either 0 or 1 before
+            // publish the data
+            assert(TDown(0,0)==0 || TDown(0,0)==1);
+            TD_cmd.data = TDown(0,0);
+            assert(TUp(0,0)==0 || TUp(0,0)==1);
+            TU_cmd.data = TUp(0,0);
+
             // create a timer to publish next_control at stamp_next.
             double time_now = ros::Time::now().toSec();
             timeToPub.setPeriod(ros::Duration(stamp_next-time_now), true);
             timeToPub.start(); // start the timer
-            /****************** DEBUG INFORMATION ***********************/
-            printf("stamp_last = %f \n", stamp_now);
-            printf("time now = %f \n", time_now);
-            printf("stamp_next = %f\n", stamp_next);
-
-            //plot(t_sol,xStar.block<3,10>(0,0),problem.name + ":states", "times(s)", "states", "x v m");
-            //plot(t_sol,uStar,problem.name + ": control", "time (s)", "control", "u");
-            /**********************************************************/
-            
+                       
             last_control = next_control;
 
 
@@ -381,14 +374,11 @@ class MainControlLoop
 
         void PubControlCb(const ros::TimerEvent& event)
         {
-            pubTimeStamp.data = ros::Time::now().toSec();
+        
             control_pub.publish(control);
             //cont_control_pub.publish(cont_control);
-            /**************DEBUG INFORMATION *********************/
-            calc_nextStamp_pub.publish(timeStampToPub);
-            actual_stamp_pub.publish(pubTimeStamp);
-            printf("actual publish time = %f", ros::Time::now().toSec());
-            /****************************************************/
+            TD_pub.publish(TD_cmd);
+            TU_pub.publish(TU_cmd);
             timeToPub.stop();
 
         }
@@ -396,9 +386,7 @@ class MainControlLoop
     private:
         ros::Publisher control_pub;
         ros::Publisher cont_control_pub;
-        /*****************8DEBUG INFORMATION ***************/
-        ros::Publisher calc_nextStamp_pub, actual_stamp_pub;
-        /***************************************************/
+        ros::Publisher TD_pub, TU_pub;
         ros::Timer timeToPub;
         MatrixXd last_control;
         MatrixXd next_control;
