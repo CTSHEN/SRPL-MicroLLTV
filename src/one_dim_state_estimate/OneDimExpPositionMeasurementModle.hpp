@@ -20,7 +20,7 @@ namespace OneDimKalman
 
             T hm()  const{ return (*this)[ HM ];}
 
-            t& hm() { return (*this)[ HM ];}
+            T& hm() { return (*this)[ HM ];}
     };
 
     /**
@@ -28,7 +28,7 @@ namespace OneDimKalman
      * 
      * The lidar measurement will directly measure the height, which is one of our state.
      * 
-     * @param T Numeric scalar tyoe
+     * @param T Numeric scalar type
      * @param CovarianceBase Class template to determine the covariance representation
      *                       (as covariance matrix (StandardBase) or as lower-triangular
      *                       coveriace square root (SquareRootBase)) 

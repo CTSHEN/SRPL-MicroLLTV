@@ -92,8 +92,30 @@ namespace OneDimKalman
         typedef OneDimKalman::State<T> S;
         //! Input typoe shortcut definition
         typedef OneDimKalman::Input<T> I;
-        //! Define Sampling time in sec
-        const float dt = 0.1;
+        //! Define and initialize the predict time interval
+        // Although the system is runnung at a constant sampling time
+        // i.e. the sampling time of the accelerometer, but the acc input
+        // signal and measurement update signal is asynchronized, a small 
+        // state propagation is needed before the measurement update.
+        // Therefore the "dt" need to be calculated every time before predict or update.
+        double dt = 0.1;
+        double timeStamp_now;
+
+        /**
+         * @brief Update system timeStamp_now
+         * 
+         * This system timeStamp_now is used to compute the ekf predict
+         * time interval.
+         * The predict time interval dt = (input time stamp) - timeStamp_now
+         * is computed before a prediction procedure every time a input signal
+         * arrives.
+         * 
+         * @param [in] t The current timestamp .
+         */
+        void setupSystemTime( double t)
+        {
+            timeStamp_now = t;
+        }
 
         /**
          * @brief Definition of translation kinematics function

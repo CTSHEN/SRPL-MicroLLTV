@@ -13,7 +13,7 @@
  *           This version modifies the MPver2 for implementation on raspberry pi 4. The
  *           modification includes
  *              1. Output two indivisual control topics for dawnward and upward thrusters.
- *             //TODO 2. Direct output the on-off control signal to GPIO.  
+ *             //TODO 2. Direct output the on-off control signal to GPIO.  (Maybe not implement)
  * @author Shen Chang-te
  */
 
