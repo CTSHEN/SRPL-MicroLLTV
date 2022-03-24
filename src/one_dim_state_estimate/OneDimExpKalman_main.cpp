@@ -21,12 +21,12 @@ using namespace OneDimKalman;
 typedef double T;
 
 // Some type shortcuts
-typedef State<T> State;
-typedef Input<T> Input;
-typedef SystemModel<T> SystemModel;
+//typedef State<T> State;
+//typedef Input<T> Input;
+//typedef SystemModel<T> SystemModel;
 
-typedef PositionMeasurement<T> PositionMeasurement;
-typedef PositionMeasurementModel<T> PositionModel;
+//typedef PositionMeasurement<T> PositionMeasurement;
+//typedef PositionMeasurementModel<T> PositionModel;
 /**
  * @brief Global variables for storing data from callback functions
  * 
@@ -60,16 +60,19 @@ std_msgs::Float32 M_est;
 class MainKalmanFilterLoop
 {
     public:
+	
         //! State variables
-        State x;
+        static State<T> x;
         //! System inputs
-        Input u;
+        static Input<T> u;
         //! Define Kalman filter system model
-        SystemModel sys;
+        static SystemModel<T> sys;
+	//! Define Position measurement type
+	static PositionMeasurement<T> posMeasure;
         //! Define Kalman filter postion measurement model
-        PositionModel pm;
+        static PositionMeasurementModel<T> pm;
         //! Extended Kalman Filter
-        Kalman::ExtendedKalmanFilter<State> ekf;
+        static Kalman::ExtendedKalmanFilter<State<T>> ekf;
 
 
         
@@ -86,11 +89,13 @@ class MainKalmanFilterLoop
 
             //! Define imu and lidar subscriber
             imu_sub = nh->subscribe<sensor_msgs::Imu>
-                ("imu_raw", 1, imuCb);
+                ("imu_raw", 1, MainKalmanFilterLoop::imuCb);
             lidar_sub = nh->subscribe<geometry_msgs::PointStamped>
-                ("height_measure", 1, lidarCb);
-            TD_sub = nh->subscribe<std_msgs::Float32>("TD_cmd", 1, TDCb);
-            TU_sub = nh->subscribe<std_msgs::Float32>("TU_cmd", 1, TUCb);
+                ("height_measure", 1, MainKalmanFilterLoop::lidarCb);
+            TD_sub = nh->subscribe<std_msgs::Float32>
+		("TD_cmd", 1, MainKalmanFilterLoop::TDCb);
+            TU_sub = nh->subscribe<std_msgs::Float32>
+		("TU_cmd", 1, MainKalmanFilterLoop::TUCb);
             
             x = State_Initialization();
             
@@ -108,9 +113,9 @@ class MainKalmanFilterLoop
          * 
          * @returns An initialized state vector.
          */
-        State State_Initialization()
+        State<T> State_Initialization()
         {
-            State x_init;
+            State<T> x_init;
             x_init.h() = 0;
             x_init.v() = 0;
             x_init.fm() = 0.5;
@@ -128,7 +133,7 @@ class MainKalmanFilterLoop
         * subscription.
         * 
         */
-        void imuCb(const snesor_msgs::Imu::ConstPtr& msg)
+        static void imuCb(const sensor_msgs::Imu::ConstPtr& msg)
         {
             Zacc = msg->linear_acceleration.z;
             Zacc_stamped = msg->header.stamp.toSec();
@@ -152,7 +157,7 @@ class MainKalmanFilterLoop
 
         }
 
-        void lidarCb(const geometry_msgs::Pointstamped::ConstPtr& msg)
+        static void lidarCb(const geometry_msgs::PointStamped::ConstPtr& msg)
         {
             position = msg->point.z - HEIGHT_TRIM;
             position_stamped = msg-> header.stamp.toSec();
@@ -163,17 +168,18 @@ class MainKalmanFilterLoop
             x = ekf.predict(sys,u);
             // updtate the  timestamp now
             sys.timeStamp_now = position_stamped;
+	    posMeasure.hm() = position;
 
             // Update EKF
-            x = ekf.update(pm, position);
+            x = ekf.update(pm, posMeasure);
         }
 
-        void TDCb(const std_msgs::Float32::ConstPtr& msg)
+        static void TDCb(const std_msgs::Float32::ConstPtr& msg)
         {
             Thruster_Down = (double) msg->data;
         }
 
-        void TUCb(const std_msgs::Float32::ConstPtr& msg)
+        static void TUCb(const std_msgs::Float32::ConstPtr& msg)
         {
             Thruster_Up = (double) msg->data;
         }
@@ -185,11 +191,11 @@ class MainKalmanFilterLoop
          * the state estimation.
          * 
          */
-        void PubStateEstimate()
+        void PubStateEstimate(const ros::TimerEvent& event)
         {
             // Packing the state
             // time stamp
-            auto pubStamp = ros::Time::now().toSec();
+            auto pubStamp = ros::Time::now();//.toSec();
             H_est.header.stamp = pubStamp;
             V_est.header.stamp = pubStamp;
 
@@ -217,6 +223,15 @@ class MainKalmanFilterLoop
 
 };  
 
+//! Static member initialization
+State<T> MainKalmanFilterLoop::x;
+Input<T> MainKalmanFilterLoop::u;
+SystemModel<T> MainKalmanFilterLoop::sys;
+PositionMeasurement<T> MainKalmanFilterLoop::posMeasure;
+PositionMeasurementModel<T> MainKalmanFilterLoop::pm;
+Kalman::ExtendedKalmanFilter<State<T>> MainKalmanFilterLoop::ekf;
+
+
 int main(int argc, char **argv)
 {
     // ROS setup
@@ -231,8 +246,9 @@ int main(int argc, char **argv)
 
     // Setup ekf loop timer
     ros::Timer ekfLoopTimer = nh.createTimer
-        (ros::Duration(1/OBSERVER_HZ),
+        (ros::Duration(1.0/OBSERVER_HZ),
         &MainKalmanFilterLoop::PubStateEstimate, &main_ekf_loop);
 
     ros::waitForShutdown();
 }
+

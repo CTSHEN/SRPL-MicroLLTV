@@ -51,6 +51,14 @@ namespace OneDimKalman
                 this->V.setIdentity();
 
             }
+	    
+	    M h(const S& x) const
+	    {
+		M measurement;
+		measurement.hm() = x.h();
+
+		return measurement;
+	    }
 
         protected:
             /**

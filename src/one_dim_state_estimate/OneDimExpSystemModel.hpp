@@ -134,7 +134,7 @@ namespace OneDimKalman
             //! predicted state vector
             S x_;
 
-            x_.h() = x.h() + x.v()*dt + 0.5*u.az()*(dt^2);
+            x_.h() = x.h() + x.v()*dt + 0.5*u.az()*(dt*dt);
             x_.v() = x.v() + u.az()*dt;
             x_.fm() = x.fm() - FUEL_FLOWRATE*dt*(u.td() + u.tu());
 
@@ -154,7 +154,7 @@ namespace OneDimKalman
          * @param x the current system state
          * @param u Ther current inputs
          */
-        void updateJacobians( const S& x, const C& u)
+        void updateJacobians( const S& x, const I& u)
         {
             // F = df/dx  (actually it's already a linear model)
             this->F.setZero();

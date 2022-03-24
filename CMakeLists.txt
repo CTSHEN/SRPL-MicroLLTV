@@ -127,6 +127,7 @@ find_package(Eigen3 REQUIRED NO_MODULE)
 SET( EIGEN3_INCLUDE_DIR /usr/include/eigen3 )
 SET( IPOPT_INCLUDE_DIR /usr/local/include/coin-or)
 SET( ADOLC_INCLUDE_DIR /usr/include/adolc)
+SET( KALMAN_INCLUDE_DIR ./include/kalman)
 
 include_directories(
   #include
@@ -135,6 +136,7 @@ include_directories(
   ${EIGEN3_INCLUDE_DIR}
   ${IPOPT_INCLUDE_DIR}  
   ${ADOLC_INCLUDE_DIR}
+  ${KALMAN_INCLUDE_DIR}
   
 )
 
@@ -156,6 +158,7 @@ add_executable(one_dim_ocp src/one_dim_ocp.cpp)
 #add_executable(one_dim_ocp_MPver src/one_dim_ocp_MPver.cpp)
 add_executable(one_dim_ocp_MPver2 src/one_dim_ocp_MPver2.cpp)
 add_executable(one_dim_traj src/one_dim_traj.cpp)
+add_executable(one_dim_exp_ekf src/one_dim_state_estimate/OneDimExpKalman_main.cpp)
 
 ## Rename C++ executable without prefix
 ## The above recommended prefix causes long target names, the following renames the
@@ -203,6 +206,10 @@ target_link_libraries( one_dim_ocp
    ${PSOPT_LIBRARIES_DIR}
    ${IPOPT_LIBRARIES_DIR}
  )
+
+target_link_libraries( one_dim_exp_ekf
+    ${catkin_LIBRARIES}
+)
 
 #############
 ## Install ##
