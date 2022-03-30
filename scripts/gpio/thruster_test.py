@@ -20,22 +20,22 @@ def signal_gen():
 
     TD = rospy.Publisher('TD_cmd', Float32, queue_size=1)
     TU = rospy.Publisher('TU_cmd', Float32, queue_size=1)
+    while not rospy.is_shutdown():
+      TD.publish(0.0)
+      TU.publish(0.0) #TU LOW
+      print('TD 0, TU 0')
+      rospy.sleep(1.0)
+      TD.publish(1.0)  # TD HIGH
+      print('TD 1, TU 0')
+      rospy.sleep(1.0)
+      TD.publish(0.0) # TD LOW
+      print('TD 0, TU 0')
+      rospy.sleep(1.0)
+      TU.publish(1.0) # TU HGIH
+      print('TD 0, TU 1')
+      rospy.sleep(1.0)
 
-    TD.publish(0.0)
-    TU.publish(0.0) #TU LOW
-    print('TD 0, TU 0')
-    rospy.sleep(1.0)
-    TD.publish(1.0)  # TD HIGH
-    print('TD 1, TU 0')
-    rospy.sleep(1.0)
-    TD.publish(0.0) # TD LOW
-    print('TD 0, TU 0')
-    rospy.sleep(1.0)
-    TU.publish(1.0) # TU HGIH
-    print('TD 0, TU 1')
-    rospy.sleep(1.0)
-
-    rospy.spin()
+      #rospy.spin()
 
 if __name__== "__main__":
     signal_gen()
