@@ -21,8 +21,8 @@ from std_msgs.msg import Float32
 from gpiozero import LED
 
 # Define GPIO
-DT = LED(16)
-UT = LED(20)
+TD = LED(16)
+TU = LED(20)
 
 """
  Callback functions
@@ -33,34 +33,35 @@ UT = LED(20)
 
 def TD_Cb(msg):
     assert msg.data == 0 or msg.data == 1, 'TD command error'
-    match msg.data:
-        case 0:
-            DT.off()
-        case 1:
-            TD.on()
-        case _:
-            print(msg.data)
-            exit()
+    
+    if msg.data == 0:
+        TD.off()
+    elif msg.data == 1:
+        TD.on()
+    else:
+        print(msg.data)
+        exit()
 
 def TU_Cb(msg):
     assert msg.data == 0 or msg.data == 1, 'TD command error'
-    match msg.data:
-        case 0:
-            UT.off()
-        case 1:
-            UT.on()
-        case _:
-            print(msg.data)
-            exit()
+    
+    if msg.data == 0:
+        TU.off()
+    elif msg.data == 1:
+        TU.on()
+    else:
+        print(msg.data)
+        exit()
+
     
 
 def thruster_startup():
-    DT.on()
-    UT.on()
+    TD.on()
+    TU.on()
     rospy.sleep(5.0) # wait 5 seconds
 
-    DT.off()
-    UT.off()
+    TD.off()
+    TU.off()
 
 def gpio_control():
     rospy.init_node('thruster_control_gpio', anonymous=True)
