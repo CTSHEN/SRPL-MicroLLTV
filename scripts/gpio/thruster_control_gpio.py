@@ -35,7 +35,7 @@ def TD_Cb(msg):
     assert msg.data == 0 or msg.data == 1, 'TD command error'
     match msg.data:
         case 0:
-            TD.off()
+            DT.off()
         case 1:
             TD.on()
         case _:
@@ -46,9 +46,9 @@ def TU_Cb(msg):
     assert msg.data == 0 or msg.data == 1, 'TD command error'
     match msg.data:
         case 0:
-            TU.off()
+            UT.off()
         case 1:
-            TU.on()
+            UT.on()
         case _:
             print(msg.data)
             exit()
