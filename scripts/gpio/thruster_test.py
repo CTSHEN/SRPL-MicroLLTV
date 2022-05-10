@@ -27,13 +27,13 @@ def signal_gen():
       rospy.sleep(1.0)
       TD.publish(1.0)  # TD HIGH
       print('TD 1, TU 0')
-      rospy.sleep(1.0)
-      TD.publish(0.0) # TD LOW
-      print('TD 0, TU 0')
-      rospy.sleep(1.0)
-      TU.publish(1.0) # TU HGIH
-      print('TD 0, TU 1')
-      rospy.sleep(1.0)
+      #rospy.sleep(1.0)
+      #TD.publish(0.0) # TD LOW
+      #print('TD 0, TU 0')
+      #rospy.sleep(1.0)
+      #TU.publish(1.0) # TU HGIH
+      #print('TD 0, TU 1')
+      rospy.sleep(10.0)
 
       #rospy.spin()
 

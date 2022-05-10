@@ -156,7 +156,7 @@ include_directories(
 # add_executable(${PROJECT_NAME}_node src/srpl-micro-lltv_node.cpp)
 add_executable(one_dim_ocp src/one_dim_ocp.cpp)
 #add_executable(one_dim_ocp_MPver src/one_dim_ocp_MPver.cpp)
-add_executable(one_dim_ocp_MPver2 src/one_dim_ocp_MPver2.cpp)
+add_executable(one_dim_ocp_MPver2_rpi4 src/one_dim_ocp_MPver2_rpi4.cpp)
 add_executable(one_dim_traj src/one_dim_traj.cpp)
 add_executable(one_dim_exp_ekf src/one_dim_state_estimate/OneDimExpKalman_main.cpp)
 
@@ -200,7 +200,7 @@ target_link_libraries( one_dim_ocp
  #  ${IPOPT_LIBRARIES_DIR}
  #)
 
- target_link_libraries( one_dim_ocp_MPver2
+ target_link_libraries( one_dim_ocp_MPver2_rpi4
    ${catkin_LIBRARIES} 
    ${ADOLC_LIBRARIES_DIR}
    ${PSOPT_LIBRARIES_DIR}

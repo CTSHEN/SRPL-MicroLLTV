@@ -14,7 +14,7 @@
 #include <geometry_msgs/PointStamped.h> // Subcribe lidar data
 
 #define OBSERVER_HZ  10
-#define HEIGHT_TRIM 1 // in meter
+#define HEIGHT_TRIM 0//1 // in meter
 
 using namespace OneDimKalman;
 

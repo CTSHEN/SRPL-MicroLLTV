@@ -14,22 +14,22 @@ OUTPUT:
         GPIO 21 PIN 40
 """
 import rospy
-from gpiozero import LED DigitalInputDevice
+from gpiozero import LED,InputDevice #DigitalInputDevice
 
 # Define GPIO
-DAQ_in = DigitalInputDevice(26)
+DAQ_in = InputDevice(26) #DigitalInputDevice(26)
 valve_out = LED(21)
 
 def signal_pass_through():
     rospy.init_node('purge_valve_control_node', anonymous=True)
     rate = rospy.Rate(2) # check every 0.5 sec
-    LED.off()
+    valve_out.off()
 
     while not rospy.is_shutdown():
-        if DAQ_in.when_activated():
-            LED.on()
+        if DAQ_in.is_active: #DAQ_in.when_activated:
+            valve_out.on()
         else:
-            LED.off()
+            valve_out.off()
         
         rate.sleep()
 

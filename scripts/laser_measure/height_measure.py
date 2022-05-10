@@ -35,6 +35,7 @@ def get_distance():
 		# 2. Read reg 0x01 (Repeat until LSB goes low)
 		while (bus.read_byte_data(address, reg_stat, 1) & 0x01):
 			pass
+		time.sleep(0.02)
 		result = bus.read_i2c_block_data(address,reg_meas_low, 2)
 		measure = ((result[1] & 0xFF) << 8) | (result[0] & 0xFF)
 		#convert measure data from float16 to float32

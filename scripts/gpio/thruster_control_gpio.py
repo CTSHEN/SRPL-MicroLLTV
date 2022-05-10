@@ -73,7 +73,7 @@ def gpio_control():
 
 if __name__ == '__main__':
     try:
-        #thruster_startup()
+        thruster_startup()
 
         gpio_control()
     except rospy.ROSInterruptException:
