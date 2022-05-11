@@ -1,6 +1,6 @@
 <?xml version="1.0"?>
 <package format="2">
-  <name>srpl-micro-lltv</name>
+  <name>srpl_micro_lltv</name>
   <version>0.0.0</version>
   <description>The srpl-micro-lltv package</description>
 
