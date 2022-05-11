@@ -9,14 +9,10 @@ $ roslaunch srpl-micro-lltv state_estimate.launch
 
 $ rosbag record -a
 
-3. Start and test the purge valve
-
-$ rosrun srpl-micro-lltv purge_valve.py
-
-4. Start the valve control and heat up the thruster
+3. Start the valve control and heat up the thruster
 
 $ rosrun srpl-micro-lltv thruster_control_gpio.py
 
-5. Start the component test
+4. Start the component test
 
 $ rosrun srpl-micro-lltv system_vtest.py
