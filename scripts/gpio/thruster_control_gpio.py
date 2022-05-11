@@ -16,7 +16,8 @@ PIN 34
 
 """
 import rospy
-from std_msgs.msg import Float32
+#from std_msgs.msg import Float32
+import OneDThrusterCmdStamped.msg
 # Use LED API to control the on-off device
 from gpiozero import LED
 
@@ -31,26 +32,25 @@ TU = LED(20)
  the thruster commands.
 """
 
-def TD_Cb(msg):
-    assert msg.data == 0 or msg.data == 1, 'TD command error'
-    
-    if msg.data == 0:
-        TD.off()
-    elif msg.data == 1:
-        TD.on()
-    else:
-        print(msg.data)
-        exit()
+def Thruster_Cb(msg):
+    assert msg.TD_signal == True or msg.TD_signal == False, 'TD command error'
+    assert msg.TU_signal == True or msg.TU_signal == False, 'TU commnad error'
 
-def TU_Cb(msg):
-    assert msg.data == 0 or msg.data == 1, 'TD command error'
-    
-    if msg.data == 0:
+    if msg.TD_signal == False and msg.TU_signal == False:
+        TD.off()
         TU.off()
-    elif msg.data == 1:
+    elif msg.TD_signal == True and msg.TU_signal == False:
+        TD.on()
+        TU.off()
+    elif msg.TD_signal == False and msg.TU_signal == True:
+        TD.off()
+        TU.on()
+    elif msg.TD_signal == True and msg.TU_signal == True:
+        TD.on()
         TU.on()
     else:
-        print(msg.data)
+        print(msg.TD_signal)
+        print(msg.TU_signal)
         exit()
 
     
@@ -66,8 +66,7 @@ def thruster_startup():
 def gpio_control():
     rospy.init_node('thruster_control_gpio', anonymous=True)
 
-    rospy.Subscriber("TD_cmd", Float32, TD_Cb)
-    rospy.Subscriber("TU_cmd", Float32, TU_Cb)
+    rospy.Subscriber("Thruster_cmd", OneDThrusterCmdStamped, Thruster_Cb)
 
     rospy.spin()
 
