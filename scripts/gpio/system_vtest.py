@@ -9,40 +9,64 @@ TD_cmd and TU_cmd to test the system on the fixed pully
 """
 import rospy
 from std_msgs.msg import Float32
+import OneDThrusterCmdStamped.msg
 
 def sys_vtest():
     rospy.init_node("system_vtest", anonymous=True)
 
-    TD = rospy.Publisher('TD_cmd', Float32, queue_size=1)
-    TU = rospy.Publisher('TU_cmd', Float32, queue_size=1)
+    ThrusterCmd = OneDThrusterCmdStamped()
+
+    TCmd = rospy.Publisher('Thruster_cmd', OneDThrusterCmdStamped, queue_size=1)
+
+    #TD = rospy.Publisher('TD_cmd', Float32, queue_size=1)
+    #TU = rospy.Publisher('TU_cmd', Float32, queue_size=1)
     while not rospy.is_shutdown():
-        # Downward 0.3s
-        TD.publish(1.0)
-        TU.publish(0.0)
+        # Downward
+        ThrusterCmd.TD_signal = True
+        ThrusterCmd.TU_signal = False
+        ThrusterCmd.header.stamp = rospy.get_rostime()
+        TCmd.publish(ThrusterCmd)        
         rospy.sleep(2)
-        # All off 0.1s
-        TD.publish(0.0)
-        TU.publish(0.0)
+
+        # All off 
+        ThrusterCmd.TD_signal = False
+        ThrusterCmd.TU_signal = False
+        ThrusterCmd.header.stamp = rospy.get_rostime()
+        TCmd.publish(ThrusterCmd)       
         rospy.sleep(0.3)
-        # Downward 0.3s
-        TD.publish(1.0)
-        TU.publish(0.0)
+        # Downward 
+        ThrusterCmd.TD_signal = True
+        ThrusterCmd.TU_signal = False
+        ThrusterCmd.header.stamp = rospy.get_rostime()
+        TCmd.publish(ThrusterCmd) 
         rospy.sleep(2)
-        # All off 0.1s
-        TD.publish(0.0)
-        TU.publish(0.0)
+
+        # All off 
+        ThrusterCmd.TD_signal = False
+        ThrusterCmd.TU_signal = False
+        ThrusterCmd.header.stamp = rospy.get_rostime()
+        TCmd.publish(ThrusterCmd)         
         rospy.sleep(0.3)
-        # Upward 0.3s
-        TD.publish(0.0)
-        TU.publish(1.0)
-        rospy.sleep(0.5)
-        # Downward 0.3s
-        TD.publish(1.0)
-        TU.publish(0.0)
+
+        # Upward 
+        ThrusterCmd.TD_signal = False
+        ThrusterCmd.TU_signal = True
+        ThrusterCmd.header.stamp = rospy.get_rostime()
+        TCmd.publish(ThrusterCmd)        
         rospy.sleep(1.0)
+
+        # Downward 
+        ThrusterCmd.TD_signal = True
+        ThrusterCmd.TU_signal = False
+        ThrusterCmd.header.stamp = rospy.get_rostime()
+        TCmd.publish(ThrusterCmd) 
+        rospy.sleep(1.0)
+        
         # All off 10s
-        TD.publish(0.0)
-        TU.publish(0.0)
+        ThrusterCmd.TD_signal = False
+        ThrusterCmd.TU_signal = False
+        ThrusterCmd.header.stamp = rospy.get_rostime()
+        TCmd.publish(ThrusterCmd) 
         rospy.sleep(10.0)
 
 if __name__== "__main__":
