@@ -3,12 +3,12 @@
        2. adis 16470 imu   3. one d exp kalman filter -->
 
   <!-- laser measurement node -->
-  <node name="height_measure" pkg="srpl-micro-lltv" type="height_measure.py" />
+  <node name="height_measure" pkg="srpl_micro_lltv" type="height_measure.py" respawn="true" />
 
   <!-- imu node -->
   <include file="$(find adi_driver)/launch/adis16470.launch"/>
 
   <!-- one dim ekf -->
-  <node name="one_dim_ekf" pkg="srpl-micro-lltv" type="one_dim_exp_ekf" />
+  <node name="one_dim_ekf" pkg="srpl_micro_lltv" type="one_dim_exp_ekf" />
 
 </launch>

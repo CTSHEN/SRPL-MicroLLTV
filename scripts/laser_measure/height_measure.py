@@ -21,7 +21,7 @@ bus = SMBus(i2c_channel)
 def get_distance():
 	pub = rospy.Publisher('height_measure', PointStamped , queue_size=1)
 	rospy.init_node('laser_measure', anonymous=True)
-	rate = rospy.Rate(20)  # Publish distance at 20Hz
+	rate = rospy.Rate(10)  # Publish distance at 10Hz
 	# Lidar adjust accuracy & speed
 	bus.write_byte_data(address, reg_accuracy, 0x0B)
 	# initialize measurement3
@@ -32,6 +32,7 @@ def get_distance():
 		# Start Garmin Lidar Lite v4 measure procedure
 		# 1. Write 0x04 to reg 0x00
 		bus.write_byte_data(address, reg_cmd, 0x04)
+		time.sleep(0.02)
 		# 2. Read reg 0x01 (Repeat until LSB goes low)
 		while (bus.read_byte_data(address, reg_stat, 1) & 0x01):
 			pass
