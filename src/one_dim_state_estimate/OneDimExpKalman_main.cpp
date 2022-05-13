@@ -199,8 +199,8 @@ class MainKalmanFilterLoop
             H_est.header.stamp = pubStamp;
             V_est.header.stamp = pubStamp;
 
-            H_est.pose.position.x = x.h();
-            V_est.twist.linear.x = x.v();
+            H_est.pose.position.z = x.h();
+            V_est.twist.linear.z = x.v();
             M_est.data = (float) x.fm(); 
 
             //publish the data to topics

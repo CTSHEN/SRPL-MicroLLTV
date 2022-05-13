@@ -3,7 +3,7 @@ component test.
 
 1. Start the state esitmation system
 
-$ roslaunch srpl-micro-lltv state_estimate.launch
+$ roslaunch srpl_micro_lltv state_estimate.launch
 
 2. Start a ros bag to record all topic data
 
@@ -11,8 +11,8 @@ $ rosbag record -a
 
 3. Start the valve control and heat up the thruster
 
-$ rosrun srpl-micro-lltv thruster_control_gpio.py
+$ rosrun srpl_micro_lltv thruster_control_gpio.py
 
 4. Start the component test
 
-$ rosrun srpl-micro-lltv system_vtest.py
+$ rosrun srpl_micro_lltv system_vtest.py
