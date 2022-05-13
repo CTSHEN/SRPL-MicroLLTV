@@ -68,8 +68,8 @@ class MainKalmanFilterLoop
         static Input<T> u;
         //! Define Kalman filter system model
         static SystemModel<T> sys;
-	//! Define Position measurement type
-	static PositionMeasurement<T> posMeasure;
+	    //! Define Position measurement type
+	    static PositionMeasurement<T> posMeasure;
         //! Define Kalman filter postion measurement model
         static PositionMeasurementModel<T> pm;
         //! Extended Kalman Filter
@@ -93,12 +93,8 @@ class MainKalmanFilterLoop
                 ("imu_raw", 1, MainKalmanFilterLoop::imuCb);
             lidar_sub = nh->subscribe<geometry_msgs::PointStamped>
                 ("height_measure", 1, MainKalmanFilterLoop::lidarCb);
-            TD_sub = nh->subscribe<std_msgs::Float32>
-		("TD_cmd", 1, MainKalmanFilterLoop::TDCb);
-            TU_sub = nh->subscribe<std_msgs::Float32>
-		("TU_cmd", 1, MainKalmanFilterLoop::TUCb);
             TCmd_sub = nh ->subscribe<srpl_micro_lltv::OneDThrusterCmdStamped>
-		("Thruster_cmd", 1, MainKalmanFilterLoop::TCmdCb);
+		        ("Thruster_cmd", 1, MainKalmanFilterLoop::TCmdCb);
             
             x = State_Initialization();
             
@@ -171,21 +167,27 @@ class MainKalmanFilterLoop
             x = ekf.predict(sys,u);
             // updtate the  timestamp now
             sys.timeStamp_now = position_stamped;
-	    posMeasure.hm() = position;
+	        posMeasure.hm() = position;
 
             // Update EKF
             x = ekf.update(pm, posMeasure);
         }
 
-        static void TDCb(const std_msgs::Float32::ConstPtr& msg)
+        /**
+         * @brief Thruster command callback function
+         * @note This callback function subscribe the thruster command (in Boolean)
+         *       and cast into float.
+         * 
+         * @param msg 
+         */
+
+        static void TCmdCb(const srpl_micro_lltv::OneDThrusterCmdStamped::Constptr& msg)
         {
-            Thruster_Down = (double) msg->data;
+            Thruster_Down = (double) msg->TD_signal;
+            Thruster_Up = (double) msg->TU_signal;
         }
 
-        static void TUCb(const std_msgs::Float32::ConstPtr& msg)
-        {
-            Thruster_Up = (double) msg->data;
-        }
+        
 
         /**
          * @brief The callback function of the observer loop timer
@@ -223,6 +225,7 @@ class MainKalmanFilterLoop
         ros::Subscriber lidar_sub;
         ros::Subscriber TD_sub;
         ros::Subscriber TU_sub;
+        ros::Subscriber TCmd_sub;
 
 };  
 
