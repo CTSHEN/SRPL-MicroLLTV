@@ -12,7 +12,7 @@
 #include <std_msgs/Float32.h> // Publish fuel mass estimate
 #include <sensor_msgs/Imu.h> // Subscribe imu data
 #include <geometry_msgs/PointStamped.h> // Subcribe lidar data
-#include <srpl_micro_lltv/OneDThrusterCmdStamped.h> // Subscribe custom msg with thruster cmd and time
+#include "srpl_micro_lltv/OneDThrusterCmdStamped.h" // Subscribe custom msg with thruster cmd and time
 
 #define OBSERVER_HZ  10
 #define HEIGHT_TRIM 0//1 // in meter
@@ -181,7 +181,7 @@ class MainKalmanFilterLoop
          * @param msg 
          */
 
-        static void TCmdCb(const srpl_micro_lltv::OneDThrusterCmdStamped::Constptr& msg)
+        static void TCmdCb(const srpl_micro_lltv::OneDThrusterCmdStamped::ConstPtr& msg)
         {
             Thruster_Down = (double) msg->TD_signal;
             Thruster_Up = (double) msg->TU_signal;
