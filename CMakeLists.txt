@@ -58,6 +58,7 @@ find_package(catkin REQUIRED COMPONENTS
 #   Message1.msg
 #   Message2.msg
     OneDThrusterCmdStamped.msg
+    OneDFuelMassStamped.msg
  )
 
 ## Generate services in the 'srv' folder
