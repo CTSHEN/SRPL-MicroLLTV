@@ -14,8 +14,9 @@
 #include <geometry_msgs/PointStamped.h> // Subcribe lidar data
 #include "srpl_micro_lltv/OneDThrusterCmdStamped.h" // Subscribe custom msg with thruster cmd and time
 
-#define OBSERVER_HZ  10
+#define OBSERVER_HZ  40
 #define HEIGHT_TRIM 0//1 // in meter
+#define G 9.81
 
 using namespace OneDimKalman;
 
@@ -90,7 +91,7 @@ class MainKalmanFilterLoop
 
             //! Define imu and lidar subscriber
             imu_sub = nh->subscribe<sensor_msgs::Imu>
-                ("imu_raw", 1, MainKalmanFilterLoop::imuCb);
+                ("imu/data_raw", 1, MainKalmanFilterLoop::imuCb);
             lidar_sub = nh->subscribe<geometry_msgs::PointStamped>
                 ("height_measure", 1, MainKalmanFilterLoop::lidarCb);
             TCmd_sub = nh ->subscribe<srpl_micro_lltv::OneDThrusterCmdStamped>
@@ -140,7 +141,7 @@ class MainKalmanFilterLoop
             // A Kalman filter predict
             // TODO how to prevent an incomming prediction while the update is not completed yet?
             // combine acc ane td, tu as input signal
-            u.az() = Zacc;
+            u.az() = Zacc - G;
             u.td() = Thruster_Down;
             u.tu() = Thruster_Up;
 
@@ -152,6 +153,7 @@ class MainKalmanFilterLoop
 
             // State propagation
             x = ekf.predict(sys,u);
+            printf("Predicted!\n");
             
 
         }
@@ -171,6 +173,7 @@ class MainKalmanFilterLoop
 
             // Update EKF
             x = ekf.update(pm, posMeasure);
+	    printf("Updated! \n");
         }
 
         /**

@@ -167,7 +167,7 @@ namespace OneDimKalman
             this->F(S::FM, S::FM) = 1;
 
             // W = df/dw (Jacobian of state transition w.r.t. the noise)
-            this -> W.setIdentity();
+            this -> W.setIdentity()*0.1;
         }
     };
 } // namespace OneDimKalman
