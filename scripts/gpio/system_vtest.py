@@ -9,7 +9,7 @@ TD_cmd and TU_cmd to test the system on the fixed pully
 """
 import rospy
 from std_msgs.msg import Float32
-import OneDThrusterCmdStamped.msg
+from srpl_micro_lltv.msg import OneDThrusterCmdStamped
 
 def sys_vtest():
     rospy.init_node("system_vtest", anonymous=True)
@@ -53,14 +53,14 @@ def sys_vtest():
         ThrusterCmd.TU_signal = True
         ThrusterCmd.header.stamp = rospy.get_rostime()
         TCmd.publish(ThrusterCmd)        
-        rospy.sleep(1.0)
+        rospy.sleep(2.0)
 
         # Downward 
         ThrusterCmd.TD_signal = True
         ThrusterCmd.TU_signal = False
         ThrusterCmd.header.stamp = rospy.get_rostime()
         TCmd.publish(ThrusterCmd) 
-        rospy.sleep(1.0)
+        rospy.sleep(2.0)
         
         # All off 10s
         ThrusterCmd.TD_signal = False

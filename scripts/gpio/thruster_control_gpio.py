@@ -17,7 +17,7 @@ PIN 34
 """
 import rospy
 #from std_msgs.msg import Float32
-import OneDThrusterCmdStamped.msg
+from srpl_micro_lltv.msg import OneDThrusterCmdStamped
 # Use LED API to control the on-off device
 from gpiozero import LED
 

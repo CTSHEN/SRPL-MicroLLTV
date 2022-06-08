@@ -9,14 +9,15 @@
 #include <ros/ros.h>
 #include <geometry_msgs/PoseStamped.h> // Publish height estimate
 #include <geometry_msgs/TwistStamped.h> // Publish velocity estimate
-#include <std_msgs/Float32.h> // Publish fuel mass estimate
+//#include <std_msgs/Float32.h> // Publish fuel mass estimate
 #include <sensor_msgs/Imu.h> // Subscribe imu data
 #include <geometry_msgs/PointStamped.h> // Subcribe lidar data
 #include "srpl_micro_lltv/OneDThrusterCmdStamped.h" // Subscribe custom msg with thruster cmd and time
+#include "srpl_micro_lltv/OneDFuelMassStamped.h" // Publish fuel mass estimate with time stamp.
 
 #define OBSERVER_HZ  40
 #define HEIGHT_TRIM 0//1 // in meter
-#define G 9.81
+#define G 9.79 //9.81
 
 using namespace OneDimKalman;
 
@@ -45,7 +46,7 @@ double Thruster_Up;
 
 geometry_msgs::PoseStamped H_est;
 geometry_msgs::TwistStamped V_est;
-std_msgs::Float32 M_est;
+srpl_micro_lltv::OneDFuelMassStamped M_est;
 
 
 /**
@@ -86,7 +87,7 @@ class MainKalmanFilterLoop
                 ("height_est", 1);
             twist_pub = nh->advertise<geometry_msgs::TwistStamped>
                 ("velocity_est", 1);
-            fuelmass_pub = nh->advertise<std_msgs::Float32>
+            fuelmass_pub = nh->advertise<srpl_micro_lltv::OneDFuelMassStamped>
                 ("mass_est", 1);
 
             //! Define imu and lidar subscriber
@@ -206,10 +207,11 @@ class MainKalmanFilterLoop
             auto pubStamp = ros::Time::now();//.toSec();
             H_est.header.stamp = pubStamp;
             V_est.header.stamp = pubStamp;
+	    M_est.header.stamp = pubStamp;
 
             H_est.pose.position.z = x.h();
             V_est.twist.linear.z = x.v();
-            M_est.data = (float) x.fm(); 
+            M_est.FuelMass = (float) x.fm(); 
 
             //publish the data to topics
             pose_pub.publish(H_est);
