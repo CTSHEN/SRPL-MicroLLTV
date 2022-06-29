@@ -207,7 +207,7 @@ class MainKalmanFilterLoop
             auto pubStamp = ros::Time::now();//.toSec();
             H_est.header.stamp = pubStamp;
             V_est.header.stamp = pubStamp;
-	    M_est.header.stamp = pubStamp;
+	        M_est.header.stamp = pubStamp;
 
             H_est.pose.position.z = x.h();
             V_est.twist.linear.z = x.v();

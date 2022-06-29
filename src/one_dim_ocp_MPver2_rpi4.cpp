@@ -25,6 +25,9 @@
 #include <std_msgs/Float32.h>
 #include <nav_msgs/Path.h>
 
+#include "srpl_micro_lltv/OneDThrusterCmdStamped.h" // Subscribe custom msg with thruster cmd and time
+#include "srpl_micro_lltv/OneDFuelMassStamped.h" // Publish fuel mass estimate with time stamp.
+
 #define M2 8 // kg
 #define M1S 8.5 //kg
 #define MF_INIT 0.5 //kg
@@ -50,14 +53,16 @@ double position_stamped;
 double velocity = 0.0;
 double velocity_stamped;
 double FmassEst = MF_INIT;
+double FmassEst_stamped;
 
 MatrixXd trajH, trajV, trajT;  // matrices to store optimal trajectory
 
 nav_msgs::Path optTraj;
 std_msgs::Float32 control; // on-off control command
 std_msgs::Float32 cont_control; //continuous control command
-std_msgs::Float32 TD_cmd; // on-off command for down thruster
-std_msgs::Float32 TU_cmd; // on-off command for up thruster
+//std_msgs::Float32 TD_cmd; // on-off command for down thruster
+//std_msgs::Float32 TU_cmd; // on-off command for up thruster
+srpl_micro_lltv::OneDThrusterCmdStamped T_cmd;
 
 
 
@@ -168,9 +173,10 @@ void velocityCb(const geometry_msgs::TwistStamped::ConstPtr& msg)
     velocity_stamped = msg -> header.stamp.toSec();
 }
 
-void massCb(const std_msgs::Float32::ConstPtr& msg)
+void massCb(const srpl_micro_lltv::OneDFuelMassStamped::ConstPtr& msg)  // TODO fix to fit new msg type
 {
-    FmassEst = msg->data;
+    FmassEst = msg->FuelMass; 
+    FmassEst_stamped = msg->header.stamped.toSec();
 }
 
 
@@ -205,12 +211,8 @@ class MainControlLoop
             cont_control_pub = nh->advertise<std_msgs::Float32>
                 ("cont_control",1);
 
-            //! Publish the control of TDown and TUp
-            TD_pub = nh->advertise<std_msgs::Float32>
-                ("TD_cmd", 1);
-            
-            TU_pub = nh->advertise<std_msgs::Float32>
-                ("TU_cmd", 1);
+            TCmd_pub = nh->advertise<srpl_micro_lltv::OneDThrusterCmdStamped>
+                ("Thruster_cmd", 1);
             
             // Timer initialization (duration 0.2 sec as default),
             // oneshoot = true, autostart = false
@@ -355,20 +357,16 @@ class MainControlLoop
             // Push data into TD_cmd and TU_cmd, check if data is either 0 or 1 before
             // publish the data
             assert(TDown(0,0)==0 || TDown(0,0)==1);
-            TD_cmd.data = TDown(0,0);
+            T_cmd.TD_signal = TDown(0,0);
             assert(TUp(0,0)==0 || TUp(0,0)==1);
-            TU_cmd.data = TUp(0,0);
-
+            T_cmd.TU_signal = TUp(0,0);
+            
             // create a timer to publish next_control at stamp_next.
             double time_now = ros::Time::now().toSec();
             timeToPub.setPeriod(ros::Duration(stamp_next-time_now), true);
             timeToPub.start(); // start the timer
                        
             last_control = next_control;
-
-
-
-
 
         }
 
@@ -377,8 +375,8 @@ class MainControlLoop
         
             control_pub.publish(control);
             //cont_control_pub.publish(cont_control);
-            TD_pub.publish(TD_cmd);
-            TU_pub.publish(TU_cmd);
+            T_cmd.header.stamp = ros::Time::now();
+            TCmd_pub.publish(T_cmd);
             timeToPub.stop();
 
         }
@@ -386,7 +384,7 @@ class MainControlLoop
     private:
         ros::Publisher control_pub;
         ros::Publisher cont_control_pub;
-        ros::Publisher TD_pub, TU_pub;
+        ros::Publisher TCmd_pub;
         ros::Timer timeToPub;
         MatrixXd last_control;
         MatrixXd next_control;
@@ -472,13 +470,13 @@ int main(int argc, char **argv)
     ros::Subscriber velocity_sub = nh.subscribe<geometry_msgs::TwistStamped>
         ("velocity_est", 1, velocityCb);
 
-    ros::Subscriber mass_sub = nh.subscribe<std_msgs::Float32>
-        ("mass_est",1 , massCb);
+    /*ros::Subscriber mass_sub = nh.subscribe<std_msgs::Float32>
+        ("mass_est",1 , massCb);*/
 
-    /*ros::Subscriber traj_sub = nh.subscribe<nav_msgs::Path>
-        ("optTraj", 1, trajCb);*/
+    ros::Subscriber mass_sub = nh.subscribe<srpl_micro_lltv::OneDFuelMassStamped>
+        ("mass_est", 1, massCb);
 
-    
+   
     // create an instance of MainControlLoop
     MainControlLoop main_control_loop(&nh, problem, solution, algorithm);
 
