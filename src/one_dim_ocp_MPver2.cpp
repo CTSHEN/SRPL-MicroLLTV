@@ -304,6 +304,9 @@ class MainControlLoop
             problem.phases(1).bounds.lower.EndTime = stamp_next;
             problem.phases(1).bounds.upper.EndTime = stamp_next+PLAN_HORIZON;
 
+            //! DEBUG 
+            printf("pos %f, vel %f, fm %f \n", position, velocity, FmassEst);
+
             ////////// Call PSOPT to solve the problem //////////
             psopt(solution, problem, algorithm);
             //if(solution.error_flag) exit(0);
@@ -367,8 +370,8 @@ class MainControlLoop
             printf("time now = %f \n", time_now);
             printf("stamp_next = %f\n", stamp_next);
 
-            //plot(t_sol,xStar.block<3,10>(0,0),problem.name + ":states", "times(s)", "states", "x v m");
-            //plot(t_sol,uStar,problem.name + ": control", "time (s)", "control", "u");
+            plot(t_sol,xStar.block<3,10>(0,0),problem.name + ":states", "times(s)", "states", "x v m");
+            plot(t_sol,uStar,problem.name + ": control", "time (s)", "control", "uD uT");
             /**********************************************************/
             
             last_control = next_control;
@@ -453,7 +456,7 @@ int main(int argc, char **argv)
     algorithm.nlp_method = "IPOPT";
     algorithm.scaling = "automatic";
     algorithm.derivatives = "automatic";
-    algorithm.nlp_iter_max = 50;
+    algorithm.nlp_iter_max = 100;//50;
     algorithm.nlp_tolerance = 1e-3;
 
     algorithm.collocation_method = "Legendre";
