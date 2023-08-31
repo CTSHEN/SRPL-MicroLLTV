@@ -48,7 +48,8 @@ namespace gazebo
         public: virtual void Load(physics::ModelPtr _model, sdf::ElementPtr _sdf);
 
         /// \brief Update the simulation state.
-        public: void Update()
+        /// \param[in] _info Information used in the update event.
+        public: void Update(const common::UpdateInfo &_info)
 
         /// \brief Callback for the input topic subscriber
         protected: void UpdateInput(ConstTCmdPtr &_msg);
