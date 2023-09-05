@@ -176,7 +176,7 @@ void velocityCb(const geometry_msgs::TwistStamped::ConstPtr& msg)
 void massCb(const srpl_micro_lltv::OneDFuelMassStamped::ConstPtr& msg)  // TODO fix to fit new msg type
 {
     FmassEst = msg->FuelMass; 
-    FmassEst_stamped = msg->header.stamped.toSec();
+    FmassEst_stamped = msg->header.stamp.toSec();
 }
 
 

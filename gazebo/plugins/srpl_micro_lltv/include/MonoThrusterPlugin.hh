@@ -22,18 +22,18 @@
 #include<boost/scoped_ptr.hpp>
 
 #include<string>
-
+#include <ros/ros.h>
 #include <gazebo/gazebo.hh>
 #include <gazebo/transport/TransportTypes.hh>
 
 #include <sdf/sdf.hh>
 
-#include "srpl_micro_lltv/OneDThrusterCmdStamped.h" // Subscribe custom msg with thruster cmd and time
+#include "srpl_micro_lltv/ThrusterCmdStamped.h" // Subscribe custom msg with thruster cmd and time
 
 namespace gazebo
 {
     /// \brief Definition of a pointer to the thruster command messages
-    typedef const boost::shared_ptr<const srpl_micro_lltv::msg::OneDThrusterCmdStamped>
+    typedef const boost::shared_ptr<const srpl_micro_lltv::ThrusterCmdStamped>
     ConstTCmdPtr;
 
     /// \brief Class for mono thruster plugin
@@ -49,7 +49,7 @@ namespace gazebo
 
         /// \brief Update the simulation state.
         /// \param[in] _info Information used in the update event.
-        public: void Update(const common::UpdateInfo &_info)
+        public: void Update(const common::UpdateInfo &_info);
 
         /// \brief Callback for the input topic subscriber
         protected: void UpdateInput(ConstTCmdPtr &_msg);
@@ -60,7 +60,7 @@ namespace gazebo
         protected: event::ConnectionPtr updateConnection;
 
         /// \brief Pointer to the thruster link
-        protected: physics::LinkPtr thrusteLink;
+        protected: physics::LinkPtr thrusterLink;
 
         /// \brief Gazebo node
         protected: transport::NodePtr node;
@@ -80,8 +80,14 @@ namespace gazebo
         /// \brief Timestamp of the thrust force
         protected: common::Time thrustForceStamp;
 
+        /// \brief Thruster joint, used to define thruster direction.
+        protected: physics::JointPtr joint;
+
         /// \brief Maximum thrust force output in N
         protected: double thrustMax;
+
+        /// \brief Minimum thrust force output in N, for mono thruster is often 0
+        protected: double thrustMin;
 
         /// \brief Thruster ID, used to generated topic names automatically.
         protected: int thrusterID;

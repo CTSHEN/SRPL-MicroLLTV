@@ -59,6 +59,7 @@ find_package(catkin REQUIRED COMPONENTS
 #   Message2.msg
     OneDThrusterCmdStamped.msg
     OneDFuelMassStamped.msg
+    ThrusterCmdStamped.msg
  )
 
 ## Generate services in the 'srv' folder
@@ -180,7 +181,7 @@ add_executable(one_dim_exp_ekf src/one_dim_state_estimate/OneDimExpKalman_main.c
 #   ${catkin_LIBRARIES}
 # )
 set(IPOPT_LIBRARIES_DIR /usr/local/lib/libipopt.so)
-set(ADOLC_LIBRARIES_DIR /usr/lib/aarch64-linux-gnu/libadolc.so)
+set(ADOLC_LIBRARIES_DIR /usr/local/lib64/libadolc.so)
 set(PSOPT_LIBRARIES_DIR /usr/local/lib/PSOPT/libPSOPT.a)
 target_link_libraries( one_dim_ocp
    ${catkin_LIBRARIES}

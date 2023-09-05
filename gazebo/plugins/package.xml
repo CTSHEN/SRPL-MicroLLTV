@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>srpl_micro_lltv_gazebo_plugin</name>
+  <version>0.1.0</version>
+  <description>
+    Mono thruster gazebo plugin
+  </description>
+
+  <maintainer email="p47081072@gs.ncku.edu.tw"> Shen Chang Te </maintainer>
+
+  <license>Apache-2.0</license>
+  
+  <depend>srpl_micro_lltv</depend>
+  <depend>roscpp</depend>
+
+  <buildtool_depend>catkin</buildtool_depend>
+
+</package>
