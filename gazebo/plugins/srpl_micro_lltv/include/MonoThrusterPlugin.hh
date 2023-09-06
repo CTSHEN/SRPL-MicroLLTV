@@ -66,7 +66,7 @@ namespace gazebo
         protected: transport::NodePtr node;
 
         /// \brief subscriber to the thruster command
-        protected: transport::SubscriberPtr commandSubscriber;
+        protected: ros::Subscriber commandSubscriber;
 
         /// \brief Publisher to output thruster topic
         protected: transport::PublisherPtr thrusterTopicPublisher;
@@ -97,6 +97,9 @@ namespace gazebo
 
         /// \brief The axis about the thrusters
         protected: ignition::math::Vector3d thrusterAxis;
+
+        /// \brief Pointer to this ROS node's handle
+        private: boost::scoped_ptr<ros::NodeHandle> rosNode;
 
     };
 }

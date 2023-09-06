@@ -60,6 +60,7 @@ void MonoThrusterPlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
     // Initializing the transport node
     this->node = transport::NodePtr(new transport::Node());
     this->node->Init(_model->GetWorld()->Name());
+    this ->rosNode.reset(new ros::NodeHandle(""));
 
     // Retrieve the link name on which the thrust will be applied
     GZ_ASSERT(_sdf->HasElement("linkName"), "Could not find linkName.");
@@ -87,11 +88,14 @@ void MonoThrusterPlugin::Load(physics::ModelPtr _model, sdf::ElementPtr _sdf)
         this->node->Advertise<msgs::Vector3d>(this->topicPrefix + "thrust");
 
     // Subscribe to the input signal topic
-
+    /*
     this->commandSubscriber =
         this->node->Subscribe(this->topicPrefix + "input",
             &MonoThrusterPlugin::UpdateInput,
-            this);
+            this); */
+    this->commandSubscriber = this->rosNode->subscribe<
+        srpl_micro_lltv::ThrusterCmdStamped>(this->commandSubscriber.getTopic(),
+        10, boost::bind(&MonoThrusterPlugin::UpdateInput, this, _1));
 
     // Connect the update event
     this->updateConnection = event::Events::ConnectWorldUpdateBegin(
